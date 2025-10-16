@@ -35,7 +35,7 @@ export class MemoComponent {
     const container = document.createElement('div');
     container.className = CSS_CLASSES.MEMO_CONTAINER;
     container.style.cssText = `
-      position: fixed;
+      position: absolute;
       left: ${this.memo.position.x}px;
       top: ${this.memo.position.y}px;
       width: ${this.memo.style.width}px;
@@ -271,10 +271,10 @@ export class MemoComponent {
    */
   private startDrag = (e: MouseEvent): void => {
     this.isDragging = true;
-    const rect = this.element.getBoundingClientRect();
+    // absoluteポジションなので、要素の現在位置からオフセットを計算
     this.dragOffset = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top
+      x: e.pageX - this.memo.position.x,
+      y: e.pageY - this.memo.position.y
     };
     this.element.style.cursor = 'grabbing';
   };
@@ -291,8 +291,8 @@ export class MemoComponent {
    */
   private handleMouseMove = (e: MouseEvent): void => {
     if (this.isDragging) {
-      const x = e.clientX - this.dragOffset.x;
-      const y = e.clientY - this.dragOffset.y;
+      const x = e.pageX - this.dragOffset.x;
+      const y = e.pageY - this.dragOffset.y;
 
       this.element.style.left = `${x}px`;
       this.element.style.top = `${y}px`;

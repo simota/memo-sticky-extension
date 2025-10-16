@@ -233,7 +233,7 @@ export class MemoManager {
         e.preventDefault();
         e.stopPropagation();
 
-        this.createMemo(e.clientX, e.clientY);
+        this.createMemo(e.pageX, e.pageY);
         this.exitCreateMode();
       };
 
@@ -298,8 +298,8 @@ export class MemoManager {
   private setupContextMenuListener(): void {
     document.addEventListener('contextmenu', (e: MouseEvent) => {
       this.lastContextMenuPosition = {
-        x: e.clientX,
-        y: e.clientY
+        x: e.pageX,
+        y: e.pageY
       };
     });
   }
