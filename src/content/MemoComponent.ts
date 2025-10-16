@@ -111,6 +111,24 @@ export class MemoComponent {
 
     leftButtons.appendChild(colorBtn);
 
+    // ユーザーID表示（共有メモの場合のみ）
+    const ownerIdSpan = document.createElement('span');
+    if ('ownerId' in this.memo) {
+      const ownerId = (this.memo as any).ownerId;
+      ownerIdSpan.style.cssText = `
+        font-size: 9px;
+        color: rgba(0, 0, 0, 0.6);
+        background-color: rgba(0, 0, 0, 0.08);
+        padding: 2px 6px;
+        border-radius: 8px;
+        margin: 0 4px;
+        white-space: nowrap;
+        font-weight: 500;
+      `;
+      ownerIdSpan.textContent = `👤 ${ownerId}`;
+      ownerIdSpan.title = `所有者: ${ownerId}`;
+    }
+
     // 中央の日時表示
     const timestampSpan = document.createElement('span');
     timestampSpan.className = 'memo-sticky-timestamp';
@@ -166,6 +184,10 @@ export class MemoComponent {
     rightButtons.appendChild(deleteBtn);
 
     header.appendChild(leftButtons);
+    // ユーザーID表示（共有メモの場合のみ追加）
+    if ('ownerId' in this.memo) {
+      header.appendChild(ownerIdSpan);
+    }
     header.appendChild(timestampSpan);
     header.appendChild(rightButtons);
 
