@@ -38,6 +38,7 @@ export interface Memo {
   position: MemoPosition;
   element?: ElementBinding;
   style: MemoStyle;
+  isMinimized?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -80,10 +81,10 @@ export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
   defaultColor: '#FFFACD', // 薄黄色
   defaultSize: {
-    width: 200,
-    height: 150
+    width: 180,
+    height: 120
   },
-  defaultFontSize: 14,
+  defaultFontSize: 13,
   syncEnabled: false,
   excludedDomains: [],
   removeQueryParams: false
@@ -92,9 +93,9 @@ export const DEFAULT_SETTINGS: Settings = {
 // デフォルトスタイル
 export const DEFAULT_STYLE: Omit<MemoStyle, 'zIndex'> = {
   color: '#FFFACD',
-  width: 200,
-  height: 150,
-  fontSize: 14
+  width: 180,
+  height: 120,
+  fontSize: 13
 };
 
 // プリセットカラー

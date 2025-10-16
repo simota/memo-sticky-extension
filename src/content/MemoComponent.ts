@@ -64,6 +64,13 @@ export class MemoComponent {
       border-bottom: 1px solid rgba(0, 0, 0, 0.1);
     `;
 
+    // 左側のボタングループ
+    const leftButtons = document.createElement('div');
+    leftButtons.style.cssText = `
+      display: flex;
+      gap: 4px;
+    `;
+
     // カラーボタン
     const colorBtn = document.createElement('button');
     colorBtn.className = CSS_CLASSES.MEMO_COLOR_BTN;
@@ -76,6 +83,32 @@ export class MemoComponent {
       padding: 4px;
     `;
     colorBtn.title = '色を変更';
+
+    leftButtons.appendChild(colorBtn);
+
+    // 右側のボタングループ
+    const rightButtons = document.createElement('div');
+    rightButtons.style.cssText = `
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    `;
+
+    // 最小化ボタン
+    const minimizeBtn = document.createElement('button');
+    minimizeBtn.className = 'memo-sticky-minimize-btn';
+    minimizeBtn.innerHTML = '−';
+    minimizeBtn.style.cssText = `
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+    `;
+    minimizeBtn.title = '最小化';
 
     // 削除ボタン
     const deleteBtn = document.createElement('button');
@@ -93,8 +126,11 @@ export class MemoComponent {
     `;
     deleteBtn.title = '削除';
 
-    header.appendChild(colorBtn);
-    header.appendChild(deleteBtn);
+    rightButtons.appendChild(minimizeBtn);
+    rightButtons.appendChild(deleteBtn);
+
+    header.appendChild(leftButtons);
+    header.appendChild(rightButtons);
 
     // コンテンツエリア
     const content = document.createElement('div');
@@ -108,6 +144,7 @@ export class MemoComponent {
       line-height: 1.5;
       outline: none;
       word-wrap: break-word;
+      color: #000;
     `;
     content.textContent = this.memo.content;
 
@@ -139,6 +176,15 @@ export class MemoComponent {
     container.appendChild(content);
     container.appendChild(footer);
 
+    // 最小化状態を適用
+    if (this.memo.isMinimized) {
+      content.style.display = 'none';
+      footer.style.display = 'none';
+      container.style.height = 'auto';
+      minimizeBtn.innerHTML = '+';
+      minimizeBtn.title = '展開';
+    }
+
     return container;
   }
 
@@ -150,6 +196,7 @@ export class MemoComponent {
     const content = this.element.querySelector(`.${CSS_CLASSES.MEMO_CONTENT}`) as HTMLElement;
     const deleteBtn = this.element.querySelector(`.${CSS_CLASSES.MEMO_DELETE_BTN}`) as HTMLElement;
     const colorBtn = this.element.querySelector(`.${CSS_CLASSES.MEMO_COLOR_BTN}`) as HTMLElement;
+    const minimizeBtn = this.element.querySelector('.memo-sticky-minimize-btn') as HTMLElement;
     const resizeHandle = this.element.querySelector(`.${CSS_CLASSES.MEMO_RESIZE_HANDLE}`) as HTMLElement;
 
     // ドラッグ開始
@@ -175,6 +222,12 @@ export class MemoComponent {
     colorBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.showColorPicker();
+    });
+
+    // 最小化トグル
+    minimizeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleMinimize();
     });
 
     // リサイズ
@@ -314,6 +367,38 @@ export class MemoComponent {
   }
 
   /**
+   * 最小化をトグル
+   */
+  private toggleMinimize(): void {
+    const content = this.element.querySelector(`.${CSS_CLASSES.MEMO_CONTENT}`) as HTMLElement;
+    const footer = this.element.querySelector(`.${CSS_CLASSES.MEMO_FOOTER}`) as HTMLElement;
+    const minimizeBtn = this.element.querySelector('.memo-sticky-minimize-btn') as HTMLElement;
+
+    this.memo.isMinimized = !this.memo.isMinimized;
+
+    if (this.memo.isMinimized) {
+      // 最小化：コンテンツとフッターを非表示
+      content.style.display = 'none';
+      footer.style.display = 'none';
+      this.element.style.height = 'auto';
+      this.element.style.width = `${Math.max(this.memo.style.width, 150)}px`;
+      minimizeBtn.innerHTML = '+';
+      minimizeBtn.title = '展開';
+    } else {
+      // 展開：コンテンツとフッターを表示
+      content.style.display = 'block';
+      footer.style.display = 'block';
+      this.element.style.height = `${this.memo.style.height}px`;
+      this.element.style.width = `${this.memo.style.width}px`;
+      minimizeBtn.innerHTML = '−';
+      minimizeBtn.title = '最小化';
+    }
+
+    this.memo.updatedAt = Date.now();
+    this.onUpdate(this.memo);
+  }
+
+  /**
    * DOM要素を取得
    */
   getElement(): HTMLElement {
@@ -334,12 +419,30 @@ export class MemoComponent {
     this.memo = memo;
     this.element.style.left = `${memo.position.x}px`;
     this.element.style.top = `${memo.position.y}px`;
-    this.element.style.width = `${memo.style.width}px`;
-    this.element.style.height = `${memo.style.height}px`;
     this.element.style.backgroundColor = memo.style.color;
     this.element.style.zIndex = String(memo.style.zIndex);
 
     const content = this.element.querySelector(`.${CSS_CLASSES.MEMO_CONTENT}`) as HTMLElement;
+    const footer = this.element.querySelector(`.${CSS_CLASSES.MEMO_FOOTER}`) as HTMLElement;
+    const minimizeBtn = this.element.querySelector('.memo-sticky-minimize-btn') as HTMLElement;
+
+    // 最小化状態に応じてサイズを設定
+    if (memo.isMinimized) {
+      this.element.style.height = 'auto';
+      this.element.style.width = `${Math.max(memo.style.width, 150)}px`;
+      content.style.display = 'none';
+      footer.style.display = 'none';
+      minimizeBtn.innerHTML = '+';
+      minimizeBtn.title = '展開';
+    } else {
+      this.element.style.width = `${memo.style.width}px`;
+      this.element.style.height = `${memo.style.height}px`;
+      content.style.display = 'block';
+      footer.style.display = 'block';
+      minimizeBtn.innerHTML = '−';
+      minimizeBtn.title = '最小化';
+    }
+
     if (content && content.textContent !== memo.content) {
       content.textContent = memo.content;
     }
