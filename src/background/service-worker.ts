@@ -6,6 +6,8 @@ import { StorageManager } from '../shared/storage';
 
 // 拡張機能インストール時の処理
 chrome.runtime.onInstalled.addListener(async (details) => {
+  console.log('Extension installed/updated:', details.reason);
+
   if (details.reason === 'install') {
     console.log('Memo Sticky Extension installed');
 
@@ -13,11 +15,27 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     await StorageManager.saveSettings({
       enabled: true
     });
-
-    // ウェルカムページを開く（オプション）
-    // chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') });
   } else if (details.reason === 'update') {
     console.log('Memo Sticky Extension updated');
+  }
+
+  // コンテキストメニューを作成（インストール/更新時に毎回実行）
+  try {
+    chrome.contextMenus.create({
+      id: 'create-memo',
+      title: 'この場所にメモを作成',
+      contexts: ['page']
+    });
+
+    chrome.contextMenus.create({
+      id: 'create-memo-selection',
+      title: '選択したテキストでメモを作成',
+      contexts: ['selection']
+    });
+
+    console.log('Context menus created');
+  } catch (error) {
+    console.error('Failed to create context menus:', error);
   }
 });
 
@@ -30,15 +48,6 @@ chrome.commands.onCommand.addListener(async (command) => {
     if (tab.id) {
       chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO' });
     }
-  }
-});
-
-// アクションボタンクリック時の処理
-chrome.action.onClicked.addListener(async (tab) => {
-  if (tab.id) {
-    // Popupが設定されている場合、この処理は実行されない
-    // manifest.jsonでdefault_popupを指定している場合は不要
-    chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO' });
   }
 });
 
@@ -88,21 +97,6 @@ async function handleMessage(message: any, _sender: chrome.runtime.MessageSender
       return { success: false, error: 'Unknown message type' };
   }
 }
-
-// コンテキストメニュー（右クリックメニュー）の追加
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({
-    id: 'create-memo',
-    title: 'この場所にメモを作成',
-    contexts: ['page']
-  });
-
-  chrome.contextMenus.create({
-    id: 'create-memo-selection',
-    title: '選択したテキストでメモを作成',
-    contexts: ['selection']
-  });
-});
 
 // コンテキストメニューのクリックハンドラー
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {

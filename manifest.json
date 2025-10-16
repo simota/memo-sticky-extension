@@ -5,7 +5,8 @@
   "description": "Webページに付箋メモを貼り付けられる拡張機能",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "contextMenus"
   ],
   "host_permissions": [
     "<all_urls>"
