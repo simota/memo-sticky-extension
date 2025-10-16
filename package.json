@@ -7,6 +7,7 @@
     "dev": "webpack --mode development --watch",
     "type-check": "tsc --noEmit",
     "clean": "rm -rf dist",
+    "generate-icons": "node scripts/generate-icons.js",
     "package": "npm run build && node scripts/package.js",
     "package:zip": "cd dist && zip -r ../memo-sticky-extension-v$npm_package_version.zip . -x '*.map'"
   },
@@ -21,6 +22,7 @@
     "@types/chrome": "^0.0.268",
     "@types/node": "^24.7.2",
     "@types/uuid": "^10.0.0",
+    "canvas": "^3.2.0",
     "copy-webpack-plugin": "^12.0.2",
     "css-loader": "^6.10.0",
     "style-loader": "^3.3.4",
