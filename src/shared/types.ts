@@ -79,7 +79,7 @@ export interface Message {
 // デフォルト設定
 export const DEFAULT_SETTINGS: Settings = {
   enabled: true,
-  defaultColor: '#FFFACD', // 薄黄色
+  defaultColor: '#FFFF88', // イエロー（ポストイット風）
   defaultSize: {
     width: 180,
     height: 120
@@ -92,18 +92,17 @@ export const DEFAULT_SETTINGS: Settings = {
 
 // デフォルトスタイル
 export const DEFAULT_STYLE: Omit<MemoStyle, 'zIndex'> = {
-  color: '#FFFACD',
+  color: '#FFFF88',
   width: 180,
   height: 120,
   fontSize: 13
 };
 
-// プリセットカラー
+// プリセットカラー（ポストイット風）
 export const PRESET_COLORS = [
-  '#FFFACD', // 薄黄色
-  '#FFE4E1', // ピンク
-  '#E0FFFF', // 水色
-  '#F0E68C', // カーキ
-  '#DDA0DD', // 薄紫
-  '#98FB98'  // 薄緑
+  '#FFFF88', // イエロー（クラシック）
+  '#CCFF90', // グリーン
+  '#81D4FA', // ブルー
+  '#F48FB1', // ピンク
+  '#FFAB91'  // オレンジ
 ];
