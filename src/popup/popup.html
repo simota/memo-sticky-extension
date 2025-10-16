@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>メモ付箋</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header class="popup-header">
+      <h1>メモ付箋</h1>
+      <div class="toggle-container">
+        <label class="toggle">
+          <input type="checkbox" id="enableToggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">有効</span>
+      </div>
+    </header>
+
+    <main class="popup-main">
+      <button id="createMemoBtn" class="btn btn-primary">
+        新しいメモを追加
+      </button>
+
+      <div class="stats">
+        <p id="memoCount">このページのメモ: 0個</p>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="actions">
+        <button id="exportBtn" class="btn btn-secondary">
+          エクスポート
+        </button>
+        <button id="importBtn" class="btn btn-secondary">
+          インポート
+        </button>
+      </div>
+
+      <input type="file" id="importFileInput" accept=".json" style="display: none;">
+    </main>
+
+    <footer class="popup-footer">
+      <button id="settingsBtn" class="btn-link">
+        設定
+      </button>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

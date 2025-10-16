@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>メモ付箋 - 設定</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>メモ付箋 - 設定</h1>
+    </header>
+
+    <main class="main">
+      <section class="section">
+        <h2>基本設定</h2>
+
+        <div class="setting-item">
+          <label for="enabledToggle">
+            <span class="setting-label">機能を有効にする</span>
+            <input type="checkbox" id="enabledToggle" class="toggle">
+          </label>
+        </div>
+
+        <div class="setting-item">
+          <label for="defaultColor">
+            <span class="setting-label">デフォルトの色</span>
+            <input type="color" id="defaultColor" value="#FFFACD">
+          </label>
+        </div>
+
+        <div class="setting-item">
+          <label for="defaultWidth">
+            <span class="setting-label">デフォルトの幅（px）</span>
+            <input type="number" id="defaultWidth" value="200" min="100" max="800">
+          </label>
+        </div>
+
+        <div class="setting-item">
+          <label for="defaultHeight">
+            <span class="setting-label">デフォルトの高さ（px）</span>
+            <input type="number" id="defaultHeight" value="150" min="80" max="600">
+          </label>
+        </div>
+
+        <div class="setting-item">
+          <label for="defaultFontSize">
+            <span class="setting-label">デフォルトのフォントサイズ（px）</span>
+            <input type="number" id="defaultFontSize" value="14" min="10" max="24">
+          </label>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>詳細設定</h2>
+
+        <div class="setting-item">
+          <label for="removeQueryParams">
+            <span class="setting-label">URLのクエリパラメータを無視</span>
+            <input type="checkbox" id="removeQueryParams" class="toggle">
+          </label>
+          <p class="setting-description">
+            有効にすると、example.com?id=123 と example.com を同じページとして扱います
+          </p>
+        </div>
+
+        <div class="setting-item">
+          <label for="syncEnabled">
+            <span class="setting-label">Chrome同期を有効にする（開発中）</span>
+            <input type="checkbox" id="syncEnabled" class="toggle" disabled>
+          </label>
+          <p class="setting-description">
+            複数のデバイス間でメモを同期します（現在は利用できません）
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>除外ドメイン</h2>
+        <p class="setting-description">
+          メモ付箋を無効にするドメインを指定します（1行に1つ）
+        </p>
+        <textarea id="excludedDomains" rows="5" placeholder="例:&#10;example.com&#10;*.google.com"></textarea>
+      </section>
+
+      <section class="section">
+        <h2>データ管理</h2>
+
+        <div class="button-group">
+          <button id="exportBtn" class="btn btn-secondary">
+            データをエクスポート
+          </button>
+          <button id="importBtn" class="btn btn-secondary">
+            データをインポート
+          </button>
+          <button id="clearAllBtn" class="btn btn-danger">
+            全データを削除
+          </button>
+        </div>
+
+        <input type="file" id="importFileInput" accept=".json" style="display: none;">
+      </section>
+
+      <div class="save-section">
+        <button id="saveBtn" class="btn btn-primary">
+          設定を保存
+        </button>
+        <span id="saveStatus" class="save-status"></span>
+      </div>
+    </main>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

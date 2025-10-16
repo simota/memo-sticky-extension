@@ -1,0 +1,133 @@
+/**
+ * Background Service Worker
+ */
+
+import { StorageManager } from '../shared/storage';
+
+// 拡張機能インストール時の処理
+chrome.runtime.onInstalled.addListener(async (details) => {
+  if (details.reason === 'install') {
+    console.log('Memo Sticky Extension installed');
+
+    // 初期設定を保存
+    await StorageManager.saveSettings({
+      enabled: true
+    });
+
+    // ウェルカムページを開く（オプション）
+    // chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') });
+  } else if (details.reason === 'update') {
+    console.log('Memo Sticky Extension updated');
+  }
+});
+
+// コマンドリスナー（キーボードショートカット）
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command === 'create-memo') {
+    // アクティブなタブにメッセージを送信
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (tab.id) {
+      chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO' });
+    }
+  }
+});
+
+// アクションボタンクリック時の処理
+chrome.action.onClicked.addListener(async (tab) => {
+  if (tab.id) {
+    // Popupが設定されている場合、この処理は実行されない
+    // manifest.jsonでdefault_popupを指定している場合は不要
+    chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO' });
+  }
+});
+
+// メッセージリスナー
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  handleMessage(message, sender)
+    .then(response => sendResponse(response))
+    .catch(error => {
+      console.error('Message handling error:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+
+  // 非同期応答のため、trueを返す
+  return true;
+});
+
+/**
+ * メッセージを処理
+ */
+async function handleMessage(message: any, _sender: chrome.runtime.MessageSender): Promise<any> {
+  switch (message.type) {
+    case 'GET_SETTINGS':
+      const settings = await StorageManager.getSettings();
+      return { success: true, settings };
+
+    case 'SAVE_SETTINGS':
+      await StorageManager.saveSettings(message.settings);
+      return { success: true };
+
+    case 'EXPORT_DATA':
+      const data = await StorageManager.exportData();
+      return { success: true, data };
+
+    case 'IMPORT_DATA':
+      await StorageManager.importData(message.data);
+      return { success: true };
+
+    case 'CLEAR_ALL_DATA':
+      await StorageManager.clearAllData();
+      return { success: true };
+
+    case 'GET_MEMOS_FOR_URL':
+      const memos = await StorageManager.getMemosForUrl(message.url);
+      return { success: true, memos };
+
+    default:
+      return { success: false, error: 'Unknown message type' };
+  }
+}
+
+// コンテキストメニュー（右クリックメニュー）の追加
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'create-memo',
+    title: 'この場所にメモを作成',
+    contexts: ['page']
+  });
+
+  chrome.contextMenus.create({
+    id: 'create-memo-selection',
+    title: '選択したテキストでメモを作成',
+    contexts: ['selection']
+  });
+});
+
+// コンテキストメニューのクリックハンドラー
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!tab?.id) return;
+
+  if (info.menuItemId === 'create-memo') {
+    chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO' });
+  } else if (info.menuItemId === 'create-memo-selection') {
+    chrome.tabs.sendMessage(tab.id, {
+      type: 'CREATE_MEMO_WITH_TEXT',
+      text: info.selectionText
+    });
+  }
+});
+
+// ストレージの変更を監視
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  console.log('Storage changed:', areaName, changes);
+});
+
+// タブが更新された時の処理（オプション）
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url) {
+    // 必要に応じて処理を追加
+  }
+});
+
+console.log('Background Service Worker initialized');

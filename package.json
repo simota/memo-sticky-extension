@@ -1,0 +1,33 @@
+{
+  "name": "memo-sticky-extension",
+  "version": "1.0.0",
+  "description": "Webページに付箋メモを貼り付けられるChrome拡張機能",
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development --watch",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "chrome-extension",
+    "memo",
+    "sticky-notes"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "@types/node": "^24.7.2",
+    "@types/uuid": "^10.0.0",
+    "copy-webpack-plugin": "^12.0.2",
+    "css-loader": "^6.10.0",
+    "style-loader": "^3.3.4",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.3.3",
+    "webpack": "^5.90.1",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "dompurify": "^3.0.8",
+    "uuid": "^9.0.1"
+  }
+}
