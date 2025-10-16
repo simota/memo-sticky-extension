@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "dompurify": "^3.0.8",
+    "peerjs": "^1.5.5",
     "uuid": "^9.0.1"
   }
 }

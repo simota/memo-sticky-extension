@@ -7,7 +7,8 @@ export const STORAGE_KEYS = {
   MEMOS: 'memos',
   SETTINGS: 'settings',
   HIGHLIGHTS: 'highlights',
-  DRAWINGS: 'drawings'
+  DRAWINGS: 'drawings',
+  USER_ID: 'userId' // P2P用のユーザーID
 } as const;
 
 // Z-index範囲
@@ -44,7 +45,10 @@ export const CSS_CLASSES = {
   HIGHLIGHT_DELETE_BTN: 'memo-highlight-delete-btn',
   DRAWING_CANVAS: 'memo-drawing-canvas',
   DRAWING_TOOLBAR: 'memo-drawing-toolbar',
-  DRAWING_MODE: 'memo-drawing-mode'
+  DRAWING_MODE: 'memo-drawing-mode',
+  // P2P共有用
+  SHARED_MEMO_CONTAINER: 'memo-shared-container',
+  SHARED_MEMO_BADGE: 'memo-shared-badge'
 } as const;
 
 // アニメーション時間（ミリ秒）

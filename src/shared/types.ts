@@ -60,6 +60,10 @@ export interface Settings {
   syncEnabled: boolean;
   excludedDomains: string[];
   removeQueryParams: boolean;
+  // P2P共有設定
+  sharingEnabled: boolean; // 共有機能のON/OFF
+  signalingServer: string; // シグナリングサーバーURL
+  sharedPeers: string[]; // 共有相手のピアID配列
 }
 
 // メッセージング用の型定義
@@ -87,7 +91,11 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultFontSize: 13,
   syncEnabled: false,
   excludedDomains: [],
-  removeQueryParams: false
+  removeQueryParams: false,
+  // P2P共有設定のデフォルト
+  sharingEnabled: false, // デフォルトは無効
+  signalingServer: 'wss://your-signaling-server.com', // 実際のサーバーURLに置き換え
+  sharedPeers: []
 };
 
 // デフォルトスタイル
@@ -173,4 +181,23 @@ export interface Drawing {
 // URL単位で描画を管理
 export interface DrawingStorage {
   [url: string]: Drawing[];
+}
+
+// ========================
+// P2P共有機能用の型定義
+// ========================
+
+// 共有可能なメモ（所有者情報付き）
+export interface SharedMemo extends Memo {
+  ownerId: string; // 所有者のピアID
+}
+
+// 共有可能なハイライト（所有者情報付き）
+export interface SharedHighlight extends Highlight {
+  ownerId: string;
+}
+
+// 共有可能な描画（所有者情報付き）
+export interface SharedDrawing extends Drawing {
+  ownerId: string;
 }
