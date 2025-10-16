@@ -3,6 +3,7 @@
  */
 
 import { StorageManager } from '../shared/storage';
+import { HIGHLIGHT_COLORS } from '../shared/types';
 
 // 拡張機能インストール時の処理
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -21,6 +22,7 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
   // コンテキストメニューを作成（インストール/更新時に毎回実行）
   try {
+    // メモ関連
     chrome.contextMenus.create({
       id: 'create-memo',
       title: 'この場所にメモを作成',
@@ -31,6 +33,23 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       id: 'create-memo-selection',
       title: '選択したテキストでメモを作成',
       contexts: ['selection']
+    });
+
+    // ハイライト関連
+    chrome.contextMenus.create({
+      id: 'highlight-parent',
+      title: 'マーカーで強調',
+      contexts: ['selection']
+    });
+
+    // 各色のサブメニューを作成
+    HIGHLIGHT_COLORS.forEach((colorInfo) => {
+      chrome.contextMenus.create({
+        id: `highlight-${colorInfo.id}`,
+        parentId: 'highlight-parent',
+        title: colorInfo.name,
+        contexts: ['selection']
+      });
     });
 
     console.log('Context menus created');
@@ -102,15 +121,28 @@ async function handleMessage(message: any, _sender: chrome.runtime.MessageSender
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
 
-  if (info.menuItemId === 'create-memo') {
+  const menuId = info.menuItemId as string;
+
+  if (menuId === 'create-memo') {
     // 右クリック位置に直接メモを作成
     chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO_AT_CONTEXT_POSITION' });
-  } else if (info.menuItemId === 'create-memo-selection') {
+  } else if (menuId === 'create-memo-selection') {
     // 選択テキスト付きでメモを作成
     chrome.tabs.sendMessage(tab.id, {
       type: 'CREATE_MEMO_WITH_TEXT',
       text: info.selectionText
     });
+  } else if (menuId.startsWith('highlight-')) {
+    // ハイライトを作成
+    const colorId = menuId.replace('highlight-', '');
+    const colorInfo = HIGHLIGHT_COLORS.find(c => c.id === colorId);
+
+    if (colorInfo) {
+      chrome.tabs.sendMessage(tab.id, {
+        type: 'CREATE_HIGHLIGHT',
+        color: colorInfo.bg
+      });
+    }
   }
 });
 

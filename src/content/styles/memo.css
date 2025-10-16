@@ -153,3 +153,36 @@
 .memo-sticky-color-btn:hover {
   filter: brightness(1.2);
 }
+
+/* ハイライト（マーカー）スタイル */
+.memo-highlight {
+  padding: 2px 0;
+  border-radius: 2px;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.memo-highlight:hover {
+  opacity: 0.7 !important;
+}
+
+/* ハイライトのアニメーション */
+@keyframes highlightFadeIn {
+  from {
+    background-color: transparent;
+  }
+  to {
+    background-color: inherit;
+  }
+}
+
+.memo-highlight {
+  animation: highlightFadeIn 0.3s ease;
+}
+
+/* 印刷時はハイライトも残す */
+@media print {
+  .memo-highlight {
+    background-color: inherit !important;
+    cursor: default !important;
+  }
+}

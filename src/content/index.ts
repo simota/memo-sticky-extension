@@ -3,23 +3,26 @@
  */
 
 import { MemoManager } from './MemoManager';
+import { HighlightManager } from './HighlightManager';
 
-// グローバルに1つだけMemoManagerインスタンスを保持
+// グローバルに1つだけマネージャーインスタンスを保持
 let memoManager: MemoManager | null = null;
+let highlightManager: HighlightManager | null = null;
 
 /**
  * 拡張機能を初期化
  */
 function initializeExtension(): void {
   // 既に初期化済みの場合は何もしない
-  if (memoManager) {
-    console.log('MemoManager already initialized');
+  if (memoManager && highlightManager) {
+    console.log('Extension already initialized');
     return;
   }
 
   try {
     memoManager = new MemoManager();
-    console.log('Memo Sticky Extension initialized');
+    highlightManager = new HighlightManager();
+    console.log('Memo Sticky Extension initialized (Memo + Highlight)');
   } catch (error) {
     console.error('Failed to initialize extension:', error);
   }
@@ -52,4 +55,5 @@ window.addEventListener('beforeunload', () => {
 // @ts-ignore
 if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
   (window as any).memoManager = memoManager;
+  (window as any).highlightManager = highlightManager;
 }

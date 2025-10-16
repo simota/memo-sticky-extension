@@ -106,3 +106,40 @@ export const PRESET_COLORS = [
   '#F48FB1', // ピンク
   '#FFAB91'  // オレンジ
 ];
+
+// ハイライト（マーカー）用カラー
+export const HIGHLIGHT_COLORS = [
+  { id: 'yellow', name: '黄色', color: '#FFFF00', bg: 'rgba(255, 255, 0, 0.3)' },
+  { id: 'green', name: '緑', color: '#00FF00', bg: 'rgba(0, 255, 0, 0.3)' },
+  { id: 'blue', name: '青', color: '#00BFFF', bg: 'rgba(0, 191, 255, 0.3)' },
+  { id: 'pink', name: 'ピンク', color: '#FF69B4', bg: 'rgba(255, 105, 180, 0.3)' },
+  { id: 'orange', name: 'オレンジ', color: '#FFA500', bg: 'rgba(255, 165, 0, 0.3)' }
+];
+
+// ハイライトの位置情報
+export interface HighlightPosition {
+  // XPathベースの位置情報
+  startContainerXPath: string;
+  endContainerXPath: string;
+  startOffset: number;
+  endOffset: number;
+  // バックアップ用テキスト情報
+  text: string;
+  prefix: string; // 前後20文字程度
+  suffix: string;
+}
+
+// ハイライトの基本データ構造
+export interface Highlight {
+  id: string;
+  url: string;
+  color: string;
+  position: HighlightPosition;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// URL単位でハイライトを管理
+export interface HighlightStorage {
+  [url: string]: Highlight[];
+}

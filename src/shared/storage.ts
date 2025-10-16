@@ -2,7 +2,7 @@
  * Chrome Storage APIラッパー
  */
 
-import { Memo, MemoStorage, Settings, DEFAULT_SETTINGS } from './types';
+import { Memo, MemoStorage, Settings, DEFAULT_SETTINGS, Highlight, HighlightStorage } from './types';
 import { STORAGE_KEYS } from './constants';
 import { normalizeUrl } from './utils';
 
@@ -213,6 +213,123 @@ export class StorageManager {
       await chrome.storage.local.clear();
     } catch (error) {
       console.error('Failed to clear all data:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 全ハイライトデータを取得
+   */
+  static async getAllHighlights(): Promise<HighlightStorage> {
+    try {
+      const result = await chrome.storage.local.get(STORAGE_KEYS.HIGHLIGHTS);
+      return result[STORAGE_KEYS.HIGHLIGHTS] || {};
+    } catch (error) {
+      console.error('Failed to get all highlights:', error);
+      return {};
+    }
+  }
+
+  /**
+   * 特定URLのハイライトを取得
+   */
+  static async getHighlightsForUrl(url: string, settings?: Settings): Promise<Highlight[]> {
+    try {
+      const removeQuery = settings?.removeQueryParams ?? false;
+      const normalizedUrl = normalizeUrl(url, removeQuery);
+      const allHighlights = await this.getAllHighlights();
+
+      // メインキーでハイライトを取得
+      let highlights = allHighlights[normalizedUrl];
+
+      // ハイライトが見つからない場合、逆のキーでフォールバック
+      if (!highlights || highlights.length === 0) {
+        const fallbackUrl = normalizeUrl(url, !removeQuery);
+        highlights = allHighlights[fallbackUrl];
+
+        // フォールバックで見つかった場合、メインキーに移行
+        if (highlights && highlights.length > 0) {
+          console.log(`Migrating highlights from ${fallbackUrl} to ${normalizedUrl}`);
+          allHighlights[normalizedUrl] = highlights;
+          delete allHighlights[fallbackUrl];
+          await chrome.storage.local.set({ [STORAGE_KEYS.HIGHLIGHTS]: allHighlights });
+        }
+      }
+
+      return highlights || [];
+    } catch (error) {
+      console.error('Failed to get highlights for URL:', error);
+      return [];
+    }
+  }
+
+  /**
+   * ハイライトを保存
+   */
+  static async saveHighlight(highlight: Highlight, settings?: Settings): Promise<void> {
+    try {
+      const removeQuery = settings?.removeQueryParams ?? false;
+      const normalizedUrl = normalizeUrl(highlight.url, removeQuery);
+      const allHighlights = await this.getAllHighlights();
+
+      if (!allHighlights[normalizedUrl]) {
+        allHighlights[normalizedUrl] = [];
+      }
+
+      // 既存のハイライトを更新または新規追加
+      const existingIndex = allHighlights[normalizedUrl].findIndex(h => h.id === highlight.id);
+      if (existingIndex !== -1) {
+        allHighlights[normalizedUrl][existingIndex] = highlight;
+      } else {
+        allHighlights[normalizedUrl].push(highlight);
+      }
+
+      await chrome.storage.local.set({ [STORAGE_KEYS.HIGHLIGHTS]: allHighlights });
+    } catch (error) {
+      console.error('Failed to save highlight:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * ハイライトを削除
+   */
+  static async deleteHighlight(highlightId: string, url: string, settings?: Settings): Promise<void> {
+    try {
+      const removeQuery = settings?.removeQueryParams ?? false;
+      const normalizedUrl = normalizeUrl(url, removeQuery);
+      const allHighlights = await this.getAllHighlights();
+
+      if (allHighlights[normalizedUrl]) {
+        allHighlights[normalizedUrl] = allHighlights[normalizedUrl].filter(h => h.id !== highlightId);
+
+        // URLにハイライトが1つもなくなった場合は削除
+        if (allHighlights[normalizedUrl].length === 0) {
+          delete allHighlights[normalizedUrl];
+        }
+
+        await chrome.storage.local.set({ [STORAGE_KEYS.HIGHLIGHTS]: allHighlights });
+      }
+    } catch (error) {
+      console.error('Failed to delete highlight:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 特定URLの全ハイライトを削除
+   */
+  static async deleteAllHighlightsForUrl(url: string, settings?: Settings): Promise<void> {
+    try {
+      const removeQuery = settings?.removeQueryParams ?? false;
+      const normalizedUrl = normalizeUrl(url, removeQuery);
+      const allHighlights = await this.getAllHighlights();
+
+      delete allHighlights[normalizedUrl];
+
+      await chrome.storage.local.set({ [STORAGE_KEYS.HIGHLIGHTS]: allHighlights });
+    } catch (error) {
+      console.error('Failed to delete all highlights for URL:', error);
       throw error;
     }
   }
