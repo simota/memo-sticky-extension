@@ -6,6 +6,9 @@ yarn.lock
 # Build output
 dist/
 
+# Package artifacts
+*.zip
+
 # IDE
 .vscode/
 .idea/
