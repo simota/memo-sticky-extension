@@ -70,6 +70,9 @@ export class MemoManager {
       // ページ離脱時に未保存のメモを保存
       this.setupBeforeUnloadListener();
 
+      // ウィンドウリサイズの監視
+      this.setupResizeListener();
+
       // P2P共有が有効な場合、初期化
       if (this.settings.sharingEnabled) {
         await this.initializeP2PSync();
@@ -602,6 +605,31 @@ export class MemoManager {
       // デバウンス中の保存を即座に実行
       this.debouncedSaveMemo.flush();
     });
+  }
+
+  /**
+   * ウィンドウリサイズ時にメモ位置を再計算
+   */
+  private setupResizeListener(): void {
+    const handleResize = debounce(() => {
+      console.log('📐 Window resized, recalculating memo positions...');
+
+      // 全メモの位置を再計算
+      this.memos.forEach(component => {
+        const memo = component.getMemo();
+        component.updateMemo(memo);
+      });
+
+      // 共有メモの位置も再計算
+      this.sharedMemos.forEach(component => {
+        const memo = component.getMemo();
+        component.updateMemo(memo);
+      });
+
+      console.log('✅ Memo positions recalculated');
+    }, 300); // 300msのデバウンス
+
+    window.addEventListener('resize', handleResize);
   }
 
   /**

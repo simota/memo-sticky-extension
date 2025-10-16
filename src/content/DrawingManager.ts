@@ -45,6 +45,7 @@ export class DrawingManager {
       await this.loadDrawings();
       this.setupMessageListener();
       this.setupP2PListeners();
+      this.setupResizeListener();
 
       console.log('DrawingManager initialized');
     } catch (error) {
@@ -99,6 +100,15 @@ export class DrawingManager {
       return;
     }
 
+    // 共有描画にviewportSizeがない場合は現在のビューポートサイズを設定
+    if (!drawing.viewportSize) {
+      drawing.viewportSize = {
+        width: window.innerWidth,
+        height: window.innerHeight
+      };
+      console.log('📐 Added viewportSize to shared drawing:', drawing.id);
+    }
+
     if (!this.svgCanvas) {
       this.createSVGCanvas();
     }
@@ -147,6 +157,15 @@ export class DrawingManager {
       }
 
       drawings.forEach(drawing => {
+        // 既存の描画にviewportSizeがない場合は現在のビューポートサイズを設定
+        if (!drawing.viewportSize) {
+          drawing.viewportSize = {
+            width: window.innerWidth,
+            height: window.innerHeight
+          };
+          console.log('📐 Added viewportSize to existing drawing:', drawing.id);
+        }
+
         const component = new DrawingComponent(drawing);
         if (this.svgCanvas) {
           const element = component.createSVGElement(this.svgCanvas);
@@ -425,6 +444,10 @@ export class DrawingManager {
       color: this.currentColor,
       strokeWidth: this.currentStrokeWidth,
       scrollOffset: { x: window.scrollX, y: window.scrollY },
+      viewportSize: {
+        width: window.innerWidth,
+        height: window.innerHeight
+      },
       createdAt: getCurrentTimestamp(),
       updatedAt: getCurrentTimestamp()
     };
@@ -536,6 +559,67 @@ export class DrawingManager {
       console.error('Failed to delete all drawings:', error);
     }
   };
+
+  /**
+   * ウィンドウリサイズリスナーを設定
+   */
+  private setupResizeListener(): void {
+    // debounce関数（shared/utils.tsから利用）
+    const debounce = (func: Function, wait: number) => {
+      let timeout: number | null = null;
+      return (...args: any[]) => {
+        if (timeout !== null) {
+          clearTimeout(timeout);
+        }
+        timeout = window.setTimeout(() => func(...args), wait);
+      };
+    };
+
+    const handleResize = debounce(() => {
+      if (!this.svgCanvas) return;
+
+      console.log('📐 Window resized, recalculating drawing positions...');
+      console.log('📐 Current drawings count:', this.drawings.size);
+      console.log('📐 Current shared drawings count:', this.sharedDrawings.size);
+
+      // 自分の描画を再作成
+      this.drawings.forEach((component, drawingId) => {
+        const drawing = component.getDrawing();
+        console.log('📐 Recreating drawing:', drawingId, {
+          hasViewportSize: !!drawing.viewportSize,
+          viewportSize: drawing.viewportSize
+        });
+        const newElement = component.recreate(this.svgCanvas!);
+        if (newElement && drawing.id) {
+          // クリックハンドラーを再設定
+          this.setupDrawingClickHandler(newElement, drawing.id);
+        }
+      });
+
+      // 共有描画を再作成
+      this.sharedDrawings.forEach((component, drawingId) => {
+        const drawing = component.getDrawing();
+        console.log('📐 Recreating shared drawing:', drawingId, {
+          hasViewportSize: !!drawing.viewportSize,
+          viewportSize: drawing.viewportSize
+        });
+        const newElement = component.recreate(this.svgCanvas!);
+        if (newElement) {
+          // 共有描画として視覚的に区別
+          newElement.style.opacity = '0.7';
+          newElement.setAttribute('data-shared', 'true');
+          if ('ownerId' in drawing) {
+            newElement.setAttribute('data-owner', (drawing as any).ownerId);
+          }
+        }
+      });
+
+      console.log('✅ Drawing positions recalculated');
+    }, 300); // 300ms debounce
+
+    window.addEventListener('resize', handleResize);
+    console.log('✅ Drawing resize listener setup complete');
+  }
 
   /**
    * メッセージリスナーを設定

@@ -175,6 +175,7 @@ export interface Drawing {
   color: string;
   strokeWidth: number;
   scrollOffset: { x: number; y: number }; // ページのスクロール位置
+  viewportSize?: { width: number; height: number }; // 作成時のビューポートサイズ（スケーリング用）
   createdAt: number;
   updatedAt: number;
 }
