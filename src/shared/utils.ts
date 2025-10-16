@@ -78,6 +78,32 @@ export function getCurrentTimestamp(): number {
 }
 
 /**
+ * 相対的な時間表示（「1分前」など）
+ */
+export function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (seconds < 60) {
+    return 'たった今';
+  } else if (minutes < 60) {
+    return `${minutes}分前`;
+  } else if (hours < 24) {
+    return `${hours}時間前`;
+  } else if (days < 7) {
+    return `${days}日前`;
+  } else {
+    // 1週間以上前は日付を表示
+    const date = new Date(timestamp);
+    return `${date.getMonth() + 1}/${date.getDate()}`;
+  }
+}
+
+/**
  * HTMLをサニタイズ（基本的なXSS対策）
  */
 export function sanitizeHtml(html: string): string {

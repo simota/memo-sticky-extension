@@ -4,7 +4,7 @@
 
 import { Memo, PRESET_COLORS } from '../shared/types';
 import { CSS_CLASSES, Z_INDEX, MEMO_SIZE } from '../shared/constants';
-import { clamp } from '../shared/utils';
+import { clamp, formatRelativeTime } from '../shared/utils';
 
 export class MemoComponent {
   private element: HTMLElement;
@@ -14,6 +14,7 @@ export class MemoComponent {
   private isDragging: boolean = false;
   private isResizing: boolean = false;
   private dragOffset: { x: number; y: number } = { x: 0, y: 0 };
+  private timestampUpdateInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     memo: Memo,
@@ -88,6 +89,17 @@ export class MemoComponent {
 
     leftButtons.appendChild(colorBtn);
 
+    // 中央の日時表示
+    const timestampSpan = document.createElement('span');
+    timestampSpan.className = 'memo-sticky-timestamp';
+    timestampSpan.style.cssText = `
+      font-size: 10px;
+      color: rgba(0, 0, 0, 0.5);
+      margin: 0 4px;
+      white-space: nowrap;
+    `;
+    timestampSpan.textContent = formatRelativeTime(this.memo.updatedAt);
+
     // 右側のボタングループ
     const rightButtons = document.createElement('div');
     rightButtons.style.cssText = `
@@ -132,6 +144,7 @@ export class MemoComponent {
     rightButtons.appendChild(deleteBtn);
 
     header.appendChild(leftButtons);
+    header.appendChild(timestampSpan);
     header.appendChild(rightButtons);
 
     // コンテンツエリア
@@ -183,6 +196,7 @@ export class MemoComponent {
     if (this.memo.isMinimized) {
       content.style.display = 'none';
       footer.style.display = 'none';
+      timestampSpan.style.display = 'none';
       container.style.height = 'auto';
       container.style.width = 'auto';
       container.style.minWidth = '70px';
@@ -245,6 +259,11 @@ export class MemoComponent {
     // グローバルイベント
     document.addEventListener('mousemove', this.handleMouseMove);
     document.addEventListener('mouseup', this.handleMouseUp);
+
+    // 日時表示を定期的に更新（1分ごと）
+    this.timestampUpdateInterval = setInterval(() => {
+      this.updateTimestamp();
+    }, 60000);
   }
 
   /**
@@ -373,28 +392,41 @@ export class MemoComponent {
   }
 
   /**
+   * 日時表示を更新
+   */
+  private updateTimestamp(): void {
+    const timestampSpan = this.element.querySelector('.memo-sticky-timestamp') as HTMLElement;
+    if (timestampSpan) {
+      timestampSpan.textContent = formatRelativeTime(this.memo.updatedAt);
+    }
+  }
+
+  /**
    * 最小化をトグル
    */
   private toggleMinimize(): void {
     const content = this.element.querySelector(`.${CSS_CLASSES.MEMO_CONTENT}`) as HTMLElement;
     const footer = this.element.querySelector(`.${CSS_CLASSES.MEMO_FOOTER}`) as HTMLElement;
     const minimizeBtn = this.element.querySelector('.memo-sticky-minimize-btn') as HTMLElement;
+    const timestampSpan = this.element.querySelector('.memo-sticky-timestamp') as HTMLElement;
 
     this.memo.isMinimized = !this.memo.isMinimized;
 
     if (this.memo.isMinimized) {
-      // 最小化：コンテンツとフッターを非表示、幅を最小限に
+      // 最小化：コンテンツとフッター、日時を非表示、幅を最小限に
       content.style.display = 'none';
       footer.style.display = 'none';
+      if (timestampSpan) timestampSpan.style.display = 'none';
       this.element.style.height = 'auto';
       this.element.style.width = 'auto';
       this.element.style.minWidth = '70px';
       minimizeBtn.innerHTML = '+';
       minimizeBtn.title = '展開';
     } else {
-      // 展開：コンテンツとフッターを表示
+      // 展開：コンテンツとフッター、日時を表示
       content.style.display = 'block';
       footer.style.display = 'block';
+      if (timestampSpan) timestampSpan.style.display = 'inline';
       this.element.style.height = `${this.memo.style.height}px`;
       this.element.style.width = `${this.memo.style.width}px`;
       this.element.style.minWidth = '';
@@ -433,6 +465,7 @@ export class MemoComponent {
     const content = this.element.querySelector(`.${CSS_CLASSES.MEMO_CONTENT}`) as HTMLElement;
     const footer = this.element.querySelector(`.${CSS_CLASSES.MEMO_FOOTER}`) as HTMLElement;
     const minimizeBtn = this.element.querySelector('.memo-sticky-minimize-btn') as HTMLElement;
+    const timestampSpan = this.element.querySelector('.memo-sticky-timestamp') as HTMLElement;
 
     // 最小化状態に応じてサイズを設定
     if (memo.isMinimized) {
@@ -441,6 +474,7 @@ export class MemoComponent {
       this.element.style.minWidth = '70px';
       content.style.display = 'none';
       footer.style.display = 'none';
+      if (timestampSpan) timestampSpan.style.display = 'none';
       minimizeBtn.innerHTML = '+';
       minimizeBtn.title = '展開';
     } else {
@@ -449,9 +483,13 @@ export class MemoComponent {
       this.element.style.minWidth = '';
       content.style.display = 'block';
       footer.style.display = 'block';
+      if (timestampSpan) timestampSpan.style.display = 'inline';
       minimizeBtn.innerHTML = '−';
       minimizeBtn.title = '最小化';
     }
+
+    // 日時表示を更新
+    this.updateTimestamp();
 
     if (content && content.textContent !== memo.content) {
       content.textContent = memo.content;
@@ -464,6 +502,9 @@ export class MemoComponent {
   destroy(): void {
     document.removeEventListener('mousemove', this.handleMouseMove);
     document.removeEventListener('mouseup', this.handleMouseUp);
+    if (this.timestampUpdateInterval) {
+      clearInterval(this.timestampUpdateInterval);
+    }
     this.element.remove();
   }
 }
