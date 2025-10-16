@@ -4,7 +4,7 @@
 
 import { Highlight, HighlightPosition } from '../shared/types';
 import { CSS_CLASSES } from '../shared/constants';
-import { generateId, getCurrentTimestamp } from '../shared/utils';
+import { generateId, getCurrentTimestamp, formatRelativeTime } from '../shared/utils';
 
 /**
  * XPathを生成
@@ -254,6 +254,7 @@ export class HighlightComponent {
       const mark = document.createElement('mark');
       mark.className = CSS_CLASSES.HIGHLIGHT;
       mark.dataset.highlightId = this.highlight.id;
+      mark.title = `マーキング: ${formatRelativeTime(this.highlight.createdAt)}`;
       mark.style.cssText = `
         background-color: ${this.highlight.color};
         cursor: pointer;
@@ -270,6 +271,8 @@ export class HighlightComponent {
       // ホバー時の視覚フィードバック
       mark.addEventListener('mouseenter', () => {
         mark.style.opacity = '0.7';
+        // ツールチップを更新（時間経過に対応）
+        mark.title = `マーキング: ${formatRelativeTime(this.highlight.createdAt)}`;
       });
 
       mark.addEventListener('mouseleave', () => {
@@ -294,6 +297,7 @@ export class HighlightComponent {
     const mark = document.createElement('mark');
     mark.className = CSS_CLASSES.HIGHLIGHT;
     mark.dataset.highlightId = this.highlight.id;
+    mark.title = `マーキング: ${formatRelativeTime(this.highlight.createdAt)}`;
     mark.style.cssText = `
       background-color: ${this.highlight.color};
       cursor: pointer;
@@ -305,6 +309,11 @@ export class HighlightComponent {
       e.preventDefault();
       e.stopPropagation();
       this.delete();
+    });
+
+    // ホバー時にツールチップを更新
+    mark.addEventListener('mouseenter', () => {
+      mark.title = `マーキング: ${formatRelativeTime(this.highlight.createdAt)}`;
     });
 
     range.insertNode(mark);
