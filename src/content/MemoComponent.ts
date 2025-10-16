@@ -184,6 +184,8 @@ export class MemoComponent {
       content.style.display = 'none';
       footer.style.display = 'none';
       container.style.height = 'auto';
+      container.style.width = 'auto';
+      container.style.minWidth = '70px';
       minimizeBtn.innerHTML = '+';
       minimizeBtn.title = '展開';
     }
@@ -381,11 +383,12 @@ export class MemoComponent {
     this.memo.isMinimized = !this.memo.isMinimized;
 
     if (this.memo.isMinimized) {
-      // 最小化：コンテンツとフッターを非表示
+      // 最小化：コンテンツとフッターを非表示、幅を最小限に
       content.style.display = 'none';
       footer.style.display = 'none';
       this.element.style.height = 'auto';
-      this.element.style.width = `${Math.max(this.memo.style.width, 150)}px`;
+      this.element.style.width = 'auto';
+      this.element.style.minWidth = '70px';
       minimizeBtn.innerHTML = '+';
       minimizeBtn.title = '展開';
     } else {
@@ -394,6 +397,7 @@ export class MemoComponent {
       footer.style.display = 'block';
       this.element.style.height = `${this.memo.style.height}px`;
       this.element.style.width = `${this.memo.style.width}px`;
+      this.element.style.minWidth = '';
       minimizeBtn.innerHTML = '−';
       minimizeBtn.title = '最小化';
     }
@@ -433,7 +437,8 @@ export class MemoComponent {
     // 最小化状態に応じてサイズを設定
     if (memo.isMinimized) {
       this.element.style.height = 'auto';
-      this.element.style.width = `${Math.max(memo.style.width, 150)}px`;
+      this.element.style.width = 'auto';
+      this.element.style.minWidth = '70px';
       content.style.display = 'none';
       footer.style.display = 'none';
       minimizeBtn.innerHTML = '+';
@@ -441,6 +446,7 @@ export class MemoComponent {
     } else {
       this.element.style.width = `${memo.style.width}px`;
       this.element.style.height = `${memo.style.height}px`;
+      this.element.style.minWidth = '';
       content.style.display = 'block';
       footer.style.display = 'block';
       minimizeBtn.innerHTML = '−';
