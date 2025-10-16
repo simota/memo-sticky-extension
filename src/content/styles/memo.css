@@ -15,7 +15,7 @@
 
 /* ヘッダー */
 .memo-sticky-header {
-  min-height: 32px;
+  min-height: 24px;
 }
 
 .memo-sticky-header button {

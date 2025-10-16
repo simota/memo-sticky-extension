@@ -54,7 +54,7 @@ export class MemoComponent {
     const header = document.createElement('div');
     header.className = CSS_CLASSES.MEMO_HEADER;
     header.style.cssText = `
-      padding: 8px;
+      padding: 4px 6px;
       background-color: rgba(0, 0, 0, 0.05);
       cursor: move;
       display: flex;
@@ -62,6 +62,7 @@ export class MemoComponent {
       align-items: center;
       user-select: none;
       border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+      min-height: 24px;
     `;
 
     // 左側のボタングループ
@@ -79,8 +80,9 @@ export class MemoComponent {
       border: none;
       background: transparent;
       cursor: pointer;
-      font-size: 16px;
-      padding: 4px;
+      font-size: 13px;
+      padding: 2px;
+      line-height: 1;
     `;
     colorBtn.title = '色を変更';
 
@@ -90,7 +92,7 @@ export class MemoComponent {
     const rightButtons = document.createElement('div');
     rightButtons.style.cssText = `
       display: flex;
-      gap: 4px;
+      gap: 2px;
       align-items: center;
     `;
 
@@ -102,11 +104,11 @@ export class MemoComponent {
       border: none;
       background: transparent;
       cursor: pointer;
-      font-size: 18px;
+      font-size: 16px;
       line-height: 1;
       padding: 0;
-      width: 20px;
-      height: 20px;
+      width: 16px;
+      height: 16px;
     `;
     minimizeBtn.title = '最小化';
 
@@ -118,11 +120,11 @@ export class MemoComponent {
       border: none;
       background: transparent;
       cursor: pointer;
-      font-size: 20px;
+      font-size: 18px;
       line-height: 1;
       padding: 0;
-      width: 20px;
-      height: 20px;
+      width: 16px;
+      height: 16px;
     `;
     deleteBtn.title = '削除';
 
@@ -138,7 +140,7 @@ export class MemoComponent {
     content.contentEditable = 'true';
     content.style.cssText = `
       flex: 1;
-      padding: 12px;
+      padding: 8px;
       overflow-y: auto;
       font-size: ${this.memo.style.fontSize}px;
       line-height: 1.5;
@@ -153,7 +155,7 @@ export class MemoComponent {
     footer.className = CSS_CLASSES.MEMO_FOOTER;
     footer.style.cssText = `
       position: relative;
-      height: 20px;
+      height: 16px;
       background-color: rgba(0, 0, 0, 0.02);
     `;
 
@@ -163,9 +165,10 @@ export class MemoComponent {
       position: absolute;
       right: 0;
       bottom: 0;
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       cursor: nwse-resize;
+      font-size: 12px;
     `;
     resizeHandle.innerHTML = '⋰';
 
