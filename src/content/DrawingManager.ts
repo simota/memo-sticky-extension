@@ -2,14 +2,16 @@
  * 描画管理 - SVG描画機能を提供
  */
 
-import { Drawing, Settings, DRAWING_COLORS } from '../shared/types';
+import { Drawing, Settings, DRAWING_COLORS, SharedDrawing } from '../shared/types';
 import { StorageManager } from '../shared/storage';
 import { generateId, getCurrentTimestamp } from '../shared/utils';
 import { CSS_CLASSES, Z_INDEX } from '../shared/constants';
 import { DrawingComponent } from './DrawingComponent';
+import { P2PSyncManager } from '../shared/p2p-sync-manager';
 
 export class DrawingManager {
   private drawings: Map<string, DrawingComponent> = new Map();
+  private sharedDrawings: Map<string, DrawingComponent> = new Map(); // 他ユーザーの描画
   private settings: Settings;
   private currentUrl: string;
   private drawingMode: boolean = false;
@@ -20,10 +22,12 @@ export class DrawingManager {
   private isDrawing: boolean = false;
   private currentColor: string = '#FF0000';
   private currentStrokeWidth: number = 3;
+  private p2pSyncManager: P2PSyncManager | null = null;
 
-  constructor() {
+  constructor(p2pSyncManager: P2PSyncManager | null = null) {
     this.currentUrl = window.location.href;
     this.settings = {} as Settings;
+    this.p2pSyncManager = p2pSyncManager;
     this.init();
   }
 
@@ -40,10 +44,91 @@ export class DrawingManager {
 
       await this.loadDrawings();
       this.setupMessageListener();
+      this.setupP2PListeners();
 
       console.log('DrawingManager initialized');
     } catch (error) {
       console.error('Failed to initialize DrawingManager:', error);
+    }
+  }
+
+  /**
+   * P2PSyncManagerを設定（後から設定可能にする）
+   */
+  setP2PSyncManager(p2pSyncManager: P2PSyncManager | null): void {
+    this.p2pSyncManager = p2pSyncManager;
+    console.log('DrawingManager: P2PSyncManager set');
+  }
+
+  /**
+   * P2Pイベントリスナーをセットアップ
+   */
+  private setupP2PListeners(): void {
+    // 初期同期データを受信
+    window.addEventListener('p2p:initial-sync', ((event: CustomEvent) => {
+      const { drawings } = event.detail;
+      if (drawings && drawings.length > 0) {
+        console.log('📥 Received initial sync drawings:', drawings.length);
+        drawings.forEach((drawing: SharedDrawing) => {
+          this.createSharedDrawingComponent(drawing);
+        });
+      }
+    }) as EventListener);
+
+    // 描画作成を受信
+    window.addEventListener('p2p:drawing-created', ((event: CustomEvent) => {
+      console.log('📥 Received p2p:drawing-created event', event.detail);
+      const drawing: SharedDrawing = event.detail;
+      this.createSharedDrawingComponent(drawing);
+    }) as EventListener);
+
+    // 描画削除を受信
+    window.addEventListener('p2p:drawing-deleted', ((event: CustomEvent) => {
+      console.log('📥 Received p2p:drawing-deleted event', event.detail);
+      const { drawingId } = event.detail;
+      this.removeSharedDrawingComponent(drawingId);
+    }) as EventListener);
+  }
+
+  /**
+   * 共有描画コンポーネントを作成（他ユーザーの描画）
+   */
+  private createSharedDrawingComponent(drawing: SharedDrawing): void {
+    // 既に存在する場合はスキップ
+    if (this.sharedDrawings.has(drawing.id)) {
+      return;
+    }
+
+    if (!this.svgCanvas) {
+      this.createSVGCanvas();
+    }
+
+    if (this.svgCanvas) {
+      const component = new DrawingComponent(drawing);
+      const element = component.createSVGElement(this.svgCanvas);
+      if (element) {
+        // 共有描画として視覚的に区別
+        element.style.opacity = '0.7';
+        element.setAttribute('data-shared', 'true');
+        element.setAttribute('data-owner', drawing.ownerId);
+
+        this.svgCanvas.appendChild(element);
+        this.sharedDrawings.set(drawing.id, component);
+
+        console.log('✅ Shared drawing created:', drawing.id, 'by', drawing.ownerId);
+      }
+    }
+  }
+
+  /**
+   * 共有描画コンポーネントを削除
+   */
+  private removeSharedDrawingComponent(drawingId: string): void {
+    const component = this.sharedDrawings.get(drawingId);
+    if (component) {
+      component.destroy();
+      this.sharedDrawings.delete(drawingId);
+      console.log('Removed shared drawing:', drawingId);
     }
   }
 
@@ -376,7 +461,15 @@ export class DrawingManager {
    */
   private saveDrawing = async (drawing: Drawing): Promise<void> => {
     try {
-      await StorageManager.saveDrawing(drawing, this.settings);
+      // P2P共有が有効な場合はP2P経由で保存（ブロードキャスト）
+      if (this.p2pSyncManager && this.settings.sharingEnabled) {
+        console.log('📡 Broadcasting drawing CREATE via P2P...');
+        await this.p2pSyncManager.broadcastDrawingCreate(drawing);
+        console.log('✅ P2P broadcast complete');
+      } else {
+        console.log('💾 Saving drawing locally only');
+        await StorageManager.saveDrawing(drawing, this.settings);
+      }
       console.log('Drawing saved:', drawing.id);
     } catch (error) {
       console.error('Failed to save drawing:', error);
@@ -410,7 +503,14 @@ export class DrawingManager {
         this.drawings.delete(drawingId);
       }
 
-      await StorageManager.deleteDrawing(drawingId, this.currentUrl, this.settings);
+      // P2P共有が有効な場合はP2P経由で削除（ブロードキャスト）
+      if (this.p2pSyncManager && this.settings.sharingEnabled) {
+        console.log('📡 Broadcasting drawing DELETE via P2P...');
+        await this.p2pSyncManager.broadcastDrawingDelete(drawingId, this.currentUrl);
+        console.log('✅ P2P broadcast complete');
+      } else {
+        await StorageManager.deleteDrawing(drawingId, this.currentUrl, this.settings);
+      }
       console.log('Drawing deleted:', drawingId);
     } catch (error) {
       console.error('Failed to delete drawing:', error);

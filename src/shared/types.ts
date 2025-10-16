@@ -39,6 +39,7 @@ export interface Memo {
   element?: ElementBinding;
   style: MemoStyle;
   isMinimized?: boolean;
+  viewportSize?: { width: number; height: number }; // 作成時のビューポートサイズ（スケーリング用）
   createdAt: number;
   updatedAt: number;
 }

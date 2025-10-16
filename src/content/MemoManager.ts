@@ -22,11 +22,24 @@ export class MemoManager {
   // P2P共有用
   private p2pSyncManager: P2PSyncManager | null = null;
   private sharedMemos: Map<string, MemoComponent> = new Map(); // 他ユーザーのメモ
+  private reconnectionTimers: Map<string, number> = new Map(); // ピアIDごとの再接続タイマー
+  private onP2PInitializedCallback: ((p2pManager: P2PSyncManager) => void) | null = null;
 
   constructor() {
     this.currentUrl = window.location.href;
     this.settings = {} as Settings;
     this.init();
+  }
+
+  /**
+   * P2P初期化完了時のコールバックを登録
+   */
+  onP2PInitialized(callback: (p2pManager: P2PSyncManager) => void): void {
+    this.onP2PInitializedCallback = callback;
+    // 既に初期化済みの場合は即座にコールバックを呼び出し
+    if (this.p2pSyncManager) {
+      callback(this.p2pSyncManager);
+    }
   }
 
   /**
@@ -81,12 +94,12 @@ export class MemoManager {
 
       await this.p2pSyncManager.initialize(this.settings.signalingServer);
 
-      // 共有相手に接続
+      // 共有相手に接続（ID比較で片側のみが接続を試みる - 競合回避）
       const sharedPeers = this.settings.sharedPeers || [];
       console.log('🔗 Attempting to connect to', sharedPeers.length, 'peers:', sharedPeers);
       console.log('🔍 My peer ID:', userId);
 
-      // 接続の競合を避けるため、IDが小さい方だけが接続を試みる
+      // IDが小さい方だけが接続を試みる（競合回避）
       for (const peerId of sharedPeers) {
         if (userId < peerId) {
           console.log('🔌 My ID is smaller, initiating connection to:', peerId);
@@ -95,21 +108,21 @@ export class MemoManager {
             console.log('✅ Successfully connected to:', peerId);
           } catch (error) {
             console.error('❌ Failed to connect to peer:', peerId, error);
-
-            // リトライ（5秒後に1回だけ）
-            console.log('🔄 Retrying connection in 5 seconds...');
-            await new Promise(resolve => setTimeout(resolve, 5000));
-
-            try {
-              console.log('🔌 Retry: Connecting to:', peerId);
-              await this.p2pSyncManager.connectToPeer(peerId);
-              console.log('✅ Retry successful: Connected to:', peerId);
-            } catch (retryError) {
-              console.error('❌ Retry failed for peer:', peerId, retryError);
-            }
+            // 即座に定期的な再接続をスケジュール
+            console.log('⏰ Scheduling periodic reconnection...');
+            this.schedulePeriodicReconnection(peerId);
           }
         } else {
           console.log('⏸️ My ID is larger, waiting for incoming connection from:', peerId);
+          // 待機側も一定時間後に接続されていなければ接続を試みる（フォールバック）
+          setTimeout(() => {
+            if (!this.p2pSyncManager) return;
+            const connectedPeers = this.p2pSyncManager.getConnectedPeers();
+            if (!connectedPeers.includes(peerId)) {
+              console.log(`⚠️ No connection from ${peerId} after 15 seconds, initiating fallback connection...`);
+              this.schedulePeriodicReconnection(peerId);
+            }
+          }, 15000);
         }
       }
 
@@ -123,9 +136,61 @@ export class MemoManager {
         isConnected: () => this.p2pSyncManager?.isConnected(),
         getMyPeerId: () => this.p2pSyncManager?.getMyPeerId()
       };
+
+      // P2P初期化完了コールバックを呼び出し
+      if (this.onP2PInitializedCallback && this.p2pSyncManager) {
+        console.log('🔔 Calling P2P initialized callback');
+        this.onP2PInitializedCallback(this.p2pSyncManager);
+      }
     } catch (error) {
       console.error('Failed to initialize P2P sync:', error);
     }
+  }
+
+  /**
+   * 定期的な再接続をスケジュール（エクスポネンシャルバックオフ）
+   */
+  private schedulePeriodicReconnection(peerId: string, attempt: number = 1): void {
+    // 既存のタイマーをクリア
+    const existingTimer = this.reconnectionTimers.get(peerId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // エクスポネンシャルバックオフ: 10秒, 20秒, 40秒, ... 最大60秒
+    const baseDelay = 10000; // 10秒
+    const maxDelay = 60000; // 60秒
+    const delay = Math.min(baseDelay * Math.pow(2, attempt - 1), maxDelay);
+
+    console.log(`⏰ Scheduling reconnection to ${peerId} in ${delay / 1000} seconds (attempt ${attempt})...`);
+
+    const timer = window.setTimeout(async () => {
+      if (!this.p2pSyncManager) {
+        console.log('⚠️ P2P manager no longer exists, canceling reconnection');
+        return;
+      }
+
+      // 既に接続済みかチェック
+      const connectedPeers = this.p2pSyncManager.getConnectedPeers();
+      if (connectedPeers.includes(peerId)) {
+        console.log(`✅ Already connected to ${peerId}, canceling scheduled reconnection`);
+        this.reconnectionTimers.delete(peerId);
+        return;
+      }
+
+      console.log(`🔌 Attempting scheduled reconnection to ${peerId} (attempt ${attempt})...`);
+      try {
+        await this.p2pSyncManager.connectToPeer(peerId);
+        console.log(`✅ Reconnection successful: ${peerId}`);
+        this.reconnectionTimers.delete(peerId);
+      } catch (error) {
+        console.error(`❌ Reconnection failed for ${peerId}:`, error);
+        // 次の試行をスケジュール
+        this.schedulePeriodicReconnection(peerId, attempt + 1);
+      }
+    }, delay);
+
+    this.reconnectionTimers.set(peerId, timer);
   }
 
   /**
@@ -302,6 +367,10 @@ export class MemoManager {
         fontSize: this.settings.defaultFontSize || DEFAULT_STYLE.fontSize,
         zIndex: this.nextZIndex++
       },
+      viewportSize: {
+        width: window.innerWidth,
+        height: window.innerHeight
+      },
       createdAt: getCurrentTimestamp(),
       updatedAt: getCurrentTimestamp()
     };
@@ -339,6 +408,10 @@ export class MemoManager {
         height: this.settings.defaultSize?.height || DEFAULT_STYLE.height,
         fontSize: this.settings.defaultFontSize || DEFAULT_STYLE.fontSize,
         zIndex: this.nextZIndex++
+      },
+      viewportSize: {
+        width: window.innerWidth,
+        height: window.innerHeight
       },
       createdAt: getCurrentTimestamp(),
       updatedAt: getCurrentTimestamp()
@@ -593,5 +666,12 @@ export class MemoManager {
    */
   getMemosCount(): number {
     return this.memos.size;
+  }
+
+  /**
+   * P2PSyncManagerを取得
+   */
+  getP2PSyncManager(): P2PSyncManager | null {
+    return this.p2pSyncManager;
   }
 }

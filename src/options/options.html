@@ -53,21 +53,31 @@
       </section>
 
       <section class="section">
-        <h2>P2P共有設定</h2>
+        <h2>リアルタイム共有設定</h2>
 
         <div class="setting-item">
           <label for="sharingEnabled">
-            <span class="setting-label">P2P共有を有効にする</span>
+            <span class="setting-label">リアルタイム共有を有効にする</span>
             <input type="checkbox" id="sharingEnabled" class="toggle">
           </label>
           <p class="setting-description">
-            他のユーザーとリアルタイムにメモを共有します（双方向）
+            サーバー経由で他のユーザーとリアルタイムにメモを共有します（双方向）
+          </p>
+        </div>
+
+        <div class="setting-item">
+          <label for="signalingServer">
+            <span class="setting-label">共有サーバーURL</span>
+            <input type="text" id="signalingServer" placeholder="https://your-server.com">
+          </label>
+          <p class="setting-description">
+            メモ共有用のサーバーのURL（デフォルトで設定済み）
           </p>
         </div>
 
         <div class="setting-item">
           <label for="myPeerId">
-            <span class="setting-label">あなたのピアID</span>
+            <span class="setting-label">あなたのユーザーID</span>
             <div class="peer-id-container">
               <input type="text" id="myPeerId" readonly>
               <button id="copyPeerIdBtn" class="btn btn-small">コピー</button>
@@ -75,33 +85,7 @@
             </div>
           </label>
           <p class="setting-description">
-            このIDを共有相手に教えてください
-          </p>
-        </div>
-
-        <div class="setting-item">
-          <label for="signalingServer">
-            <span class="setting-label">シグナリングサーバーURL</span>
-            <input type="text" id="signalingServer" placeholder="wss://your-server.com">
-          </label>
-          <p class="setting-description">
-            P2P接続用のシグナリングサーバーのURL（デフォルトで設定済み）
-          </p>
-        </div>
-
-        <div class="setting-item">
-          <label>
-            <span class="setting-label">共有相手のピアID</span>
-          </label>
-          <div class="peer-list">
-            <div class="peer-input-group">
-              <input type="text" id="newPeerId" placeholder="memo-xxxxxxxx">
-              <button id="addPeerBtn" class="btn btn-small">追加</button>
-            </div>
-            <ul id="sharedPeersList" class="peers-list"></ul>
-          </div>
-          <p class="setting-description">
-            共有したい相手のピアIDを追加してください
+            共有を有効にすると、このIDで自動的にサーバーに接続されます
           </p>
         </div>
       </section>

@@ -25,6 +25,13 @@ function initializeExtension(): void {
     memoManager = new MemoManager();
     highlightManager = new HighlightManager();
     drawingManager = new DrawingManager();
+
+    // MemoManagerのP2P初期化完了後、DrawingManagerにP2PSyncManagerを設定
+    memoManager.onP2PInitialized((p2pManager) => {
+      console.log('✅ P2P initialized, setting up DrawingManager');
+      drawingManager?.setP2PSyncManager(p2pManager);
+    });
+
     console.log('Memo Sticky Extension initialized (Memo + Highlight + Drawing)');
   } catch (error) {
     console.error('Failed to initialize extension:', error);

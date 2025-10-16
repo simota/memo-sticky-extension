@@ -1,13 +1,12 @@
 /**
- * PeerJS Signaling Server
+ * WebSocket Broadcast Server
  *
- * Lightweight WebRTC signaling server for P2P connections.
- * This server only handles peer discovery and connection setup.
- * Actual data transfer happens directly between peers (P2P).
+ * Server-relayed message broadcasting for memo synchronization.
+ * All messages are relayed through the server to all connected clients.
  */
 
 const express = require('express');
-const { ExpressPeerServer } = require('peer');
+const { WebSocketServer } = require('ws');
 
 const app = express();
 const PORT = process.env.PORT || 9000;
@@ -16,45 +15,81 @@ const PORT = process.env.PORT || 9000;
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
-    service: 'Memo Chat Signaling Server',
-    version: '1.0.0'
+    service: 'Memo Chat WebSocket Server',
+    version: '2.0.0',
+    clients: wss.clients.size
   });
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'healthy' });
+  res.json({
+    status: 'healthy',
+    connectedClients: wss.clients ? wss.clients.size : 0
+  });
 });
 
 // Start HTTP server
 const server = app.listen(PORT, () => {
-  console.log(`🚀 Signaling server running on port ${PORT}`);
-  console.log(`📡 PeerJS endpoint: http://localhost:${PORT}/peerjs`);
+  console.log(`🚀 WebSocket server running on port ${PORT}`);
+  console.log(`📡 WebSocket endpoint: ws://localhost:${PORT}`);
 });
 
-// Setup PeerJS signaling server
-const peerServer = ExpressPeerServer(server, {
-  debug: true,
-  path: '/',
-  allow_discovery: true, // Allow peer discovery
-  // Security options
-  corsOptions: {
-    origin: '*', // Allow Chrome extension origins
-    methods: ['GET', 'POST'],
-    credentials: true
-  }
-});
+// WebSocketサーバーのセットアップ
+const wss = new WebSocketServer({ server });
 
-// PeerJS event handlers
-peerServer.on('connection', (client) => {
-  console.log(`✅ Peer connected: ${client.id}`);
-});
+// 接続中のクライアントを管理（ユーザーID -> WebSocket）
+const clients = new Map();
 
-peerServer.on('disconnect', (client) => {
-  console.log(`❌ Peer disconnected: ${client.id}`);
-});
+wss.on('connection', (ws) => {
+  let userId = null;
 
-// Mount PeerJS server
-app.use('/peerjs', peerServer);
+  console.log('📞 New WebSocket connection');
+
+  ws.on('message', (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+
+      // 接続登録メッセージ
+      if (data.type === 'register') {
+        userId = data.userId;
+        clients.set(userId, ws);
+        console.log(`✅ Client registered: ${userId} (Total: ${clients.size})`);
+
+        // 登録確認を送信
+        ws.send(JSON.stringify({ type: 'registered', userId }));
+        return;
+      }
+
+      // 通常のメッセージ：全クライアントにブロードキャスト（送信者以外）
+      if (userId) {
+        console.log(`📡 Broadcasting message from ${userId} (type: ${data.type})`);
+
+        let broadcastCount = 0;
+        clients.forEach((clientWs, clientId) => {
+          if (clientId !== userId && clientWs.readyState === 1) { // 1 = OPEN
+            clientWs.send(JSON.stringify(data));
+            broadcastCount++;
+          }
+        });
+
+        console.log(`📤 Broadcasted to ${broadcastCount} client(s)`);
+      }
+    } catch (error) {
+      console.error('❌ Error processing message:', error);
+    }
+  });
+
+  ws.on('close', () => {
+    if (userId) {
+      clients.delete(userId);
+      console.log(`👋 Client disconnected: ${userId} (Remaining: ${clients.size})`);
+    }
+  });
+
+  ws.on('error', (error) => {
+    console.error('❌ WebSocket error:', error);
+  });
+});
 
 // Error handling
 process.on('uncaughtException', (error) => {

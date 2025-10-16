@@ -1,240 +1,143 @@
 /**
- * P2P Client - PeerJSラッパー
- * WebRTC Data Channelを使用したピア間直接通信
+ * WebSocket Client - サーバー経由ブロードキャスト
+ * WebSocketを使用してサーバー経由で全クライアントにメッセージを送信
  */
 
-import Peer, { DataConnection } from 'peerjs';
-
 export class P2PClient {
-  private peer: Peer | null = null;
-  private connections: Map<string, DataConnection> = new Map();
+  private ws: WebSocket | null = null;
   private userId: string;
+  private serverUrl: string = '';
   private onDataCallback: ((data: any, peerId: string) => void) | null = null;
   private onConnectionCallback: ((peerId: string) => void) | null = null;
-  private onDisconnectionCallback: ((peerId: string) => void) | null = null;
+  private reconnectTimer: number | null = null;
+  private isIntentionalClose: boolean = false;
 
   constructor(userId: string) {
     this.userId = userId;
   }
 
   /**
-   * PeerJS初期化（シグナリングサーバーに接続）
+   * WebSocketサーバーに接続
    */
   initialize(signalingServerUrl: string): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         const url = new URL(signalingServerUrl);
-        const isSecure = url.protocol === 'wss:' || url.protocol === 'https:';
-        const port = url.port || (isSecure ? 443 : 80);
+        // HTTPSの場合はWSS、HTTPの場合はWS
+        const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.serverUrl = `${protocol}//${url.host}`;
 
-        console.log('🔧 Initializing PeerJS...');
+        console.log('🔧 Initializing WebSocket Client...');
         console.log('🔍 User ID:', this.userId);
-        console.log('🔍 Server:', url.hostname, ':', parseInt(port.toString()));
-        console.log('🔍 Secure:', isSecure);
+        console.log('🔍 Server:', this.serverUrl);
 
-        this.peer = new Peer(this.userId, {
-          host: url.hostname,
-          port: parseInt(port.toString()),
-          path: '/peerjs',
-          secure: isSecure,
-          config: {
-            iceServers: [
-              { urls: 'stun:stun.l.google.com:19302' }, // Google Public STUN
-              { urls: 'stun:stun1.l.google.com:19302' }
-              // 必要に応じてTURNサーバーを追加
-            ]
-          },
-          debug: 2 // デバッグレベル（0-3）
-        });
-
-        this.peer.on('open', (id) => {
-          console.log('✅ PeerJS connected with ID:', id);
-          this.setupListeners();
-          resolve();
-        });
-
-        this.peer.on('error', (error) => {
-          console.error('❌ PeerJS error:', error);
-          reject(error);
-        });
-
-        this.peer.on('disconnected', () => {
-          console.warn('⚠️ PeerJS disconnected from server');
-          // 自動再接続を試みる
-          setTimeout(() => {
-            if (this.peer && !this.peer.destroyed) {
-              console.log('🔄 Attempting to reconnect...');
-              this.peer.reconnect();
-            }
-          }, 3000);
-        });
+        this.connectToServer(resolve, reject);
       } catch (error) {
-        console.error('Failed to initialize P2P client:', error);
+        console.error('Failed to initialize WebSocket client:', error);
         reject(error);
       }
     });
   }
 
   /**
-   * リスナーをセットアップ
+   * WebSocket接続を確立
    */
-  private setupListeners(): void {
-    if (!this.peer) return;
+  private connectToServer(resolve?: () => void, reject?: (error: Error) => void): void {
+    this.ws = new WebSocket(this.serverUrl);
 
-    console.log('👂 Setting up peer listeners for incoming connections');
+    this.ws.onopen = () => {
+      console.log('✅ [WS OPEN] WebSocket connected to server');
 
-    // 他のピアからの接続要求を受信
-    this.peer.on('connection', (conn) => {
-      console.log('📞 Incoming connection from:', conn.peer);
-      console.log('🔍 Connection metadata:', conn.metadata);
-      this.setupConnection(conn);
-    });
+      // サーバーに登録
+      this.ws!.send(JSON.stringify({
+        type: 'register',
+        userId: this.userId
+      }));
+
+      if (resolve) resolve();
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+
+        // 登録確認
+        if (data.type === 'registered') {
+          console.log('✅ [REGISTERED] Registered with server as:', data.userId);
+          // 接続完了コールバックを呼び出し（初期同期のため）
+          if (this.onConnectionCallback) {
+            console.log('🔔 Calling onConnection callback for initial sync');
+            this.onConnectionCallback(data.userId);
+          }
+          return;
+        }
+
+        // メッセージ受信
+        console.log('📨 [MESSAGE] Received from server:', data.type);
+        if (this.onDataCallback) {
+          // peerIdとして送信者のuserIdを渡す（互換性のため）
+          this.onDataCallback(data, data.senderId || 'server');
+        }
+      } catch (error) {
+        console.error('❌ Error parsing message:', error);
+      }
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('❌ [WS ERROR] WebSocket error:', error);
+      if (reject) reject(new Error('WebSocket connection failed'));
+    };
+
+    this.ws.onclose = () => {
+      console.warn('⚠️ [WS CLOSED] WebSocket connection closed');
+
+      // 意図的なクローズでなければ再接続
+      if (!this.isIntentionalClose) {
+        console.log('🔄 [RECONNECTING] Attempting to reconnect in 3 seconds...');
+        this.reconnectTimer = window.setTimeout(() => {
+          this.connectToServer();
+        }, 3000);
+      }
+    };
   }
 
   /**
-   * 他のピアに接続
+   * 他のピアに接続（WebSocket版では何もしない - サーバー経由のため不要）
    */
-  connect(peerId: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.peer) {
-        reject(new Error('Peer not initialized'));
-        return;
-      }
-
-      // 既に接続済みか確認
-      if (this.connections.has(peerId)) {
-        console.log('Already connected to:', peerId);
-        resolve();
-        return;
-      }
-
-      console.log('🔌 Connecting to peer:', peerId);
-      console.log('🔍 My peer ID:', this.userId);
-      console.log('🔍 Peer server:', this.peer?.options.host, this.peer?.options.port);
-
-      const conn = this.peer.connect(peerId, {
-        reliable: true, // データの順序保証・再送
-        serialization: 'json'
-      });
-
-      console.log('⏳ Waiting for connection to open...');
-
-      // タイムアウト処理（30秒）
-      const timeout = setTimeout(() => {
-        console.error('⏱️ Connection timeout with:', peerId);
-        reject(new Error(`Connection timeout: ${peerId}`));
-      }, 30000);
-
-      // 接続成功時のハンドラー（一度だけ実行）
-      const onOpen = () => {
-        clearTimeout(timeout);
-        console.log('✅ Connection established with:', peerId);
-        resolve();
-      };
-
-      // エラーハンドラー
-      const onError = (error: Error) => {
-        clearTimeout(timeout);
-        console.error('❌ Connection error with', peerId, ':', error);
-        reject(error);
-      };
-
-      conn.on('open', onOpen);
-      conn.on('error', onError);
-
-      // 共通のコネクション設定（データ受信など）
-      this.setupConnection(conn);
-    });
-  }
-
-  /**
-   * コネクションのイベントハンドラーを設定
-   */
-  private setupConnection(conn: DataConnection): void {
-    conn.on('open', () => {
-      this.connections.set(conn.peer, conn);
-      console.log(`🔗 Connection opened with: ${conn.peer}`);
-
-      if (this.onConnectionCallback) {
-        this.onConnectionCallback(conn.peer);
-      }
-    });
-
-    conn.on('data', (data) => {
-      console.log('📨 Received data from', conn.peer, ':', data);
-      if (this.onDataCallback) {
-        this.onDataCallback(data, conn.peer);
-      }
-    });
-
-    conn.on('close', () => {
-      console.log('🔌 Connection closed with:', conn.peer);
-      this.connections.delete(conn.peer);
-
-      if (this.onDisconnectionCallback) {
-        this.onDisconnectionCallback(conn.peer);
-      }
-    });
-
-    conn.on('error', (error) => {
-      console.error('❌ Connection error with', conn.peer, ':', error);
-      this.connections.delete(conn.peer);
-    });
+  connect(_peerId: string): Promise<void> {
+    console.log('🔍 [INFO] Server-relay mode: peer connections not needed');
+    return Promise.resolve();
   }
 
   /**
    * データを全ピアに送信（ブロードキャスト）
    */
   broadcast(data: any): void {
-    console.log('📡 Broadcasting to', this.connections.size, 'connections...');
-    console.log('🔍 Connection map:', Array.from(this.connections.keys()));
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.error('❌ WebSocket not connected');
+      return;
+    }
 
-    let successCount = 0;
-    let failCount = 0;
+    try {
+      // senderIdを追加してサーバーに送信
+      const message = {
+        ...data,
+        senderId: this.userId
+      };
 
-    this.connections.forEach((conn, peerId) => {
-      console.log('🔍 Checking connection to', peerId, '- open:', conn.open);
-      if (conn.open) {
-        try {
-          conn.send(data);
-          successCount++;
-          console.log('📤 Sent data to', peerId);
-        } catch (error) {
-          console.error('Failed to send to', peerId, ':', error);
-          failCount++;
-        }
-      } else {
-        console.warn('⚠️ Connection not open:', peerId);
-        failCount++;
-      }
-    });
-
-    console.log(`📡 Broadcast: ${successCount} success, ${failCount} failed`);
-
-    if (this.connections.size === 0) {
-      console.error('❌ No connections available for broadcast!');
-      console.log('💡 Make sure both peers have each other\'s IDs in settings');
+      this.ws.send(JSON.stringify(message));
+      console.log('📤 [BROADCAST] Sent to server:', data.type);
+    } catch (error) {
+      console.error('❌ Failed to broadcast:', error);
     }
   }
 
   /**
-   * 特定のピアにデータを送信
+   * 特定のピアにデータを送信（WebSocket版ではbroadcastと同じ）
    */
-  sendTo(peerId: string, data: any): boolean {
-    const conn = this.connections.get(peerId);
-    if (conn && conn.open) {
-      try {
-        conn.send(data);
-        console.log('📤 Sent data to', peerId);
-        return true;
-      } catch (error) {
-        console.error('Failed to send to', peerId, ':', error);
-        return false;
-      }
-    } else {
-      console.warn('Connection not found or not open:', peerId);
-      return false;
-    }
+  sendTo(_peerId: string, data: any): boolean {
+    this.broadcast(data);
+    return true;
   }
 
   /**
@@ -245,64 +148,57 @@ export class P2PClient {
   }
 
   /**
-   * ピア接続時のコールバックを登録
+   * サーバー接続完了時のコールバックを登録
    */
   onConnection(callback: (peerId: string) => void): void {
     this.onConnectionCallback = callback;
   }
 
   /**
-   * ピア切断時のコールバックを登録
+   * ピア切断時のコールバックを登録（互換性のため残す - WebSocket版では使用しない）
    */
-  onDisconnection(callback: (peerId: string) => void): void {
-    this.onDisconnectionCallback = callback;
+  onDisconnection(_callback: (peerId: string) => void): void {
+    // WebSocket版では不要
   }
 
   /**
-   * 接続中のピアIDリストを取得
+   * 接続中のピアIDリストを取得（WebSocket版では常に空配列）
    */
   getConnectedPeers(): string[] {
-    return Array.from(this.connections.keys()).filter((peerId) => {
-      const conn = this.connections.get(peerId);
-      return conn && conn.open;
-    });
-  }
-
-  /**
-   * 特定のピアとの接続を切断
-   */
-  disconnectFrom(peerId: string): void {
-    const conn = this.connections.get(peerId);
-    if (conn) {
-      conn.close();
-      this.connections.delete(peerId);
-      console.log('🔌 Disconnected from:', peerId);
-    }
+    return [];
   }
 
   /**
    * 全接続を切断
    */
   disconnect(): void {
-    console.log('🔌 Disconnecting all connections...');
-    this.connections.forEach((conn) => conn.close());
-    this.connections.clear();
-    this.peer?.destroy();
-    this.peer = null;
-    console.log('✅ All connections closed');
+    console.log('🔌 Disconnecting WebSocket...');
+    this.isIntentionalClose = true;
+
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+
+    console.log('✅ WebSocket disconnected');
   }
 
   /**
    * 接続状態を確認
    */
   isConnected(): boolean {
-    return this.peer !== null && !this.peer.destroyed && this.peer.open;
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
   }
 
   /**
    * 自分のピアIDを取得
    */
   getMyPeerId(): string | null {
-    return this.peer?.id || null;
+    return this.userId;
   }
 }

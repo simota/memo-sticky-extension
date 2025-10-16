@@ -32,12 +32,34 @@ export class MemoComponent {
    * DOM要素を作成
    */
   private createElement(): HTMLElement {
+    // ビューポートサイズに基づいてスケーリング計算
+    let scaledX = this.memo.position.x;
+    let scaledY = this.memo.position.y;
+
+    if (this.memo.viewportSize) {
+      const currentWidth = window.innerWidth;
+      const currentHeight = window.innerHeight;
+      const originalWidth = this.memo.viewportSize.width;
+      const originalHeight = this.memo.viewportSize.height;
+
+      // 画面サイズの比率でスケーリング
+      scaledX = (this.memo.position.x / originalWidth) * currentWidth;
+      scaledY = (this.memo.position.y / originalHeight) * currentHeight;
+
+      console.log('📐 Scaling memo position:', {
+        original: { x: this.memo.position.x, y: this.memo.position.y },
+        scaled: { x: scaledX, y: scaledY },
+        viewportOriginal: { width: originalWidth, height: originalHeight },
+        viewportCurrent: { width: currentWidth, height: currentHeight }
+      });
+    }
+
     const container = document.createElement('div');
     container.className = CSS_CLASSES.MEMO_CONTAINER;
     container.style.cssText = `
       position: absolute;
-      left: ${this.memo.position.x}px;
-      top: ${this.memo.position.y}px;
+      left: ${scaledX}px;
+      top: ${scaledY}px;
       width: ${this.memo.style.width}px;
       height: ${this.memo.style.height}px;
       z-index: ${this.memo.style.zIndex};
@@ -324,6 +346,11 @@ export class MemoComponent {
    */
   private handleMouseUp = (): void => {
     if (this.isDragging || this.isResizing) {
+      // ドラッグ/リサイズ終了時にビューポートサイズを更新
+      this.memo.viewportSize = {
+        width: window.innerWidth,
+        height: window.innerHeight
+      };
       this.memo.updatedAt = Date.now();
       this.onUpdate(this.memo);
     }
@@ -453,8 +480,23 @@ export class MemoComponent {
    */
   updateMemo(memo: Memo): void {
     this.memo = memo;
-    this.element.style.left = `${memo.position.x}px`;
-    this.element.style.top = `${memo.position.y}px`;
+
+    // ビューポートサイズに基づいてスケーリング計算
+    let scaledX = memo.position.x;
+    let scaledY = memo.position.y;
+
+    if (memo.viewportSize) {
+      const currentWidth = window.innerWidth;
+      const currentHeight = window.innerHeight;
+      const originalWidth = memo.viewportSize.width;
+      const originalHeight = memo.viewportSize.height;
+
+      scaledX = (memo.position.x / originalWidth) * currentWidth;
+      scaledY = (memo.position.y / originalHeight) * currentHeight;
+    }
+
+    this.element.style.left = `${scaledX}px`;
+    this.element.style.top = `${scaledY}px`;
     this.element.style.backgroundColor = memo.style.color;
     this.element.style.zIndex = String(memo.style.zIndex);
 
