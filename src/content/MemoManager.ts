@@ -16,6 +16,7 @@ export class MemoManager {
   private nextZIndex: number = Z_INDEX.MIN;
   private createModeClickHandler: ((e: MouseEvent) => void) | null = null;
   private createModeCancelHandler: ((e: KeyboardEvent) => void) | null = null;
+  private lastContextMenuPosition: { x: number; y: number } | null = null;
 
   constructor() {
     this.currentUrl = window.location.href;
@@ -44,6 +45,9 @@ export class MemoManager {
 
       // メッセージリスナーを設定
       this.setupMessageListener();
+
+      // 右クリック位置を保存
+      this.setupContextMenuListener();
 
       console.log('MemoManager initialized');
     } catch (error) {
@@ -121,6 +125,35 @@ export class MemoManager {
       ) as HTMLElement;
       contentElement?.focus();
     }
+  };
+
+  /**
+   * テキスト付きで新しいメモを作成
+   */
+  private createMemoWithText = (x: number, y: number, text: string): void => {
+    const memo: Memo = {
+      id: generateId(),
+      url: this.currentUrl,
+      content: text,
+      position: {
+        x,
+        y,
+        type: 'fixed'
+      },
+      style: {
+        ...DEFAULT_STYLE,
+        color: this.settings.defaultColor || DEFAULT_STYLE.color,
+        width: this.settings.defaultSize?.width || DEFAULT_STYLE.width,
+        height: this.settings.defaultSize?.height || DEFAULT_STYLE.height,
+        fontSize: this.settings.defaultFontSize || DEFAULT_STYLE.fontSize,
+        zIndex: this.nextZIndex++
+      },
+      createdAt: getCurrentTimestamp(),
+      updatedAt: getCurrentTimestamp()
+    };
+
+    this.createMemoComponent(memo);
+    this.saveMemo(memo);
   };
 
   /**
@@ -256,6 +289,18 @@ export class MemoManager {
   }
 
   /**
+   * 右クリック位置を記録
+   */
+  private setupContextMenuListener(): void {
+    document.addEventListener('contextmenu', (e: MouseEvent) => {
+      this.lastContextMenuPosition = {
+        x: e.clientX,
+        y: e.clientY
+      };
+    });
+  }
+
+  /**
    * メッセージリスナーを設定
    */
   private setupMessageListener(): void {
@@ -263,6 +308,28 @@ export class MemoManager {
       switch (message.type) {
         case 'CREATE_MEMO':
           this.toggleCreateMode();
+          sendResponse({ success: true });
+          break;
+
+        case 'CREATE_MEMO_AT_CONTEXT_POSITION':
+          // 右クリック位置にメモを作成
+          if (this.lastContextMenuPosition) {
+            this.createMemo(this.lastContextMenuPosition.x, this.lastContextMenuPosition.y);
+            this.lastContextMenuPosition = null;
+          }
+          sendResponse({ success: true });
+          break;
+
+        case 'CREATE_MEMO_WITH_TEXT':
+          // 選択テキスト付きでメモを作成
+          if (this.lastContextMenuPosition) {
+            this.createMemoWithText(
+              this.lastContextMenuPosition.x,
+              this.lastContextMenuPosition.y,
+              message.text || ''
+            );
+            this.lastContextMenuPosition = null;
+          }
           sendResponse({ success: true });
           break;
 

@@ -103,8 +103,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
 
   if (info.menuItemId === 'create-memo') {
-    chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO' });
+    // 右クリック位置に直接メモを作成
+    chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO_AT_CONTEXT_POSITION' });
   } else if (info.menuItemId === 'create-memo-selection') {
+    // 選択テキスト付きでメモを作成
     chrome.tabs.sendMessage(tab.id, {
       type: 'CREATE_MEMO_WITH_TEXT',
       text: info.selectionText
