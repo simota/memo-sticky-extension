@@ -2,7 +2,7 @@
  * Chrome Storage APIラッパー
  */
 
-import { Memo, MemoStorage, Settings, DEFAULT_SETTINGS, Highlight, HighlightStorage } from './types';
+import { Memo, MemoStorage, Settings, DEFAULT_SETTINGS, Highlight, HighlightStorage, Drawing, DrawingStorage } from './types';
 import { STORAGE_KEYS } from './constants';
 import { normalizeUrl } from './utils';
 
@@ -330,6 +330,118 @@ export class StorageManager {
       await chrome.storage.local.set({ [STORAGE_KEYS.HIGHLIGHTS]: allHighlights });
     } catch (error) {
       console.error('Failed to delete all highlights for URL:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 全描画データを取得
+   */
+  static async getAllDrawings(): Promise<DrawingStorage> {
+    try {
+      const result = await chrome.storage.local.get(STORAGE_KEYS.DRAWINGS);
+      return result[STORAGE_KEYS.DRAWINGS] || {};
+    } catch (error) {
+      console.error('Failed to get all drawings:', error);
+      return {};
+    }
+  }
+
+  /**
+   * 特定URLの描画を取得
+   */
+  static async getDrawingsForUrl(url: string, settings?: Settings): Promise<Drawing[]> {
+    try {
+      const removeQuery = settings?.removeQueryParams ?? false;
+      const normalizedUrl = normalizeUrl(url, removeQuery);
+      const allDrawings = await this.getAllDrawings();
+
+      let drawings = allDrawings[normalizedUrl];
+
+      if (!drawings || drawings.length === 0) {
+        const fallbackUrl = normalizeUrl(url, !removeQuery);
+        drawings = allDrawings[fallbackUrl];
+
+        if (drawings && drawings.length > 0) {
+          console.log(`Migrating drawings from ${fallbackUrl} to ${normalizedUrl}`);
+          allDrawings[normalizedUrl] = drawings;
+          delete allDrawings[fallbackUrl];
+          await chrome.storage.local.set({ [STORAGE_KEYS.DRAWINGS]: allDrawings });
+        }
+      }
+
+      return drawings || [];
+    } catch (error) {
+      console.error('Failed to get drawings for URL:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 描画を保存
+   */
+  static async saveDrawing(drawing: Drawing, settings?: Settings): Promise<void> {
+    try {
+      const removeQuery = settings?.removeQueryParams ?? false;
+      const normalizedUrl = normalizeUrl(drawing.url, removeQuery);
+      const allDrawings = await this.getAllDrawings();
+
+      if (!allDrawings[normalizedUrl]) {
+        allDrawings[normalizedUrl] = [];
+      }
+
+      const existingIndex = allDrawings[normalizedUrl].findIndex(d => d.id === drawing.id);
+      if (existingIndex !== -1) {
+        allDrawings[normalizedUrl][existingIndex] = drawing;
+      } else {
+        allDrawings[normalizedUrl].push(drawing);
+      }
+
+      await chrome.storage.local.set({ [STORAGE_KEYS.DRAWINGS]: allDrawings });
+    } catch (error) {
+      console.error('Failed to save drawing:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 描画を削除
+   */
+  static async deleteDrawing(drawingId: string, url: string, settings?: Settings): Promise<void> {
+    try {
+      const removeQuery = settings?.removeQueryParams ?? false;
+      const normalizedUrl = normalizeUrl(url, removeQuery);
+      const allDrawings = await this.getAllDrawings();
+
+      if (allDrawings[normalizedUrl]) {
+        allDrawings[normalizedUrl] = allDrawings[normalizedUrl].filter(d => d.id !== drawingId);
+
+        if (allDrawings[normalizedUrl].length === 0) {
+          delete allDrawings[normalizedUrl];
+        }
+
+        await chrome.storage.local.set({ [STORAGE_KEYS.DRAWINGS]: allDrawings });
+      }
+    } catch (error) {
+      console.error('Failed to delete drawing:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 特定URLの全描画を削除
+   */
+  static async deleteAllDrawingsForUrl(url: string, settings?: Settings): Promise<void> {
+    try {
+      const removeQuery = settings?.removeQueryParams ?? false;
+      const normalizedUrl = normalizeUrl(url, removeQuery);
+      const allDrawings = await this.getAllDrawings();
+
+      delete allDrawings[normalizedUrl];
+
+      await chrome.storage.local.set({ [STORAGE_KEYS.DRAWINGS]: allDrawings });
+    } catch (error) {
+      console.error('Failed to delete all drawings for URL:', error);
       throw error;
     }
   }

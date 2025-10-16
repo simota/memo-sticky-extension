@@ -143,3 +143,34 @@ export interface Highlight {
 export interface HighlightStorage {
   [url: string]: Highlight[];
 }
+
+// 描画ツールの種類
+export type DrawingToolType = 'pen' | 'circle' | 'rect' | 'arrow' | 'line' | 'eraser';
+
+// 描画用カラー
+export const DRAWING_COLORS = [
+  { id: 'red', name: '赤', color: '#FF0000' },
+  { id: 'blue', name: '青', color: '#0000FF' },
+  { id: 'green', name: '緑', color: '#00FF00' },
+  { id: 'yellow', name: '黄', color: '#FFFF00' },
+  { id: 'black', name: '黒', color: '#000000' },
+  { id: 'white', name: '白', color: '#FFFFFF' }
+];
+
+// 描画の基本データ構造
+export interface Drawing {
+  id: string;
+  url: string;
+  type: DrawingToolType;
+  pathData: string; // SVG path data or shape params
+  color: string;
+  strokeWidth: number;
+  scrollOffset: { x: number; y: number }; // ページのスクロール位置
+  createdAt: number;
+  updatedAt: number;
+}
+
+// URL単位で描画を管理
+export interface DrawingStorage {
+  [url: string]: Drawing[];
+}

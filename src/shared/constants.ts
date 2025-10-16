@@ -6,7 +6,8 @@
 export const STORAGE_KEYS = {
   MEMOS: 'memos',
   SETTINGS: 'settings',
-  HIGHLIGHTS: 'highlights'
+  HIGHLIGHTS: 'highlights',
+  DRAWINGS: 'drawings'
 } as const;
 
 // Z-index範囲
@@ -40,7 +41,10 @@ export const CSS_CLASSES = {
   MEMO_COLOR_BTN: 'memo-sticky-color-btn',
   CREATE_MODE: 'memo-sticky-create-mode',
   HIGHLIGHT: 'memo-highlight',
-  HIGHLIGHT_DELETE_BTN: 'memo-highlight-delete-btn'
+  HIGHLIGHT_DELETE_BTN: 'memo-highlight-delete-btn',
+  DRAWING_CANVAS: 'memo-drawing-canvas',
+  DRAWING_TOOLBAR: 'memo-drawing-toolbar',
+  DRAWING_MODE: 'memo-drawing-mode'
 } as const;
 
 // アニメーション時間（ミリ秒）
@@ -56,5 +60,7 @@ export const MESSAGE_TYPES = {
   SAVE_SETTINGS: 'SAVE_SETTINGS',
   CREATE_HIGHLIGHT: 'CREATE_HIGHLIGHT',
   DELETE_HIGHLIGHT: 'DELETE_HIGHLIGHT',
-  DELETE_ALL_HIGHLIGHTS: 'DELETE_ALL_HIGHLIGHTS'
+  DELETE_ALL_HIGHLIGHTS: 'DELETE_ALL_HIGHLIGHTS',
+  TOGGLE_DRAWING_MODE: 'TOGGLE_DRAWING_MODE',
+  DELETE_ALL_DRAWINGS: 'DELETE_ALL_DRAWINGS'
 } as const;

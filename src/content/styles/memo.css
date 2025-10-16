@@ -186,3 +186,27 @@
     cursor: default !important;
   }
 }
+
+/* 描画キャンバス */
+.memo-drawing-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* 描画モード時のカーソル */
+.memo-drawing-mode {
+  cursor: crosshair !important;
+}
+
+.memo-drawing-mode * {
+  cursor: crosshair !important;
+}
+
+/* 印刷時は描画も残す */
+@media print {
+  .memo-drawing-canvas {
+    pointer-events: none !important;
+  }
+}
