@@ -196,7 +196,6 @@ export class MemoComponent {
     if (this.memo.isMinimized) {
       content.style.display = 'none';
       footer.style.display = 'none';
-      timestampSpan.style.display = 'none';
       container.style.height = 'auto';
       container.style.width = 'auto';
       container.style.minWidth = '70px';
@@ -408,25 +407,22 @@ export class MemoComponent {
     const content = this.element.querySelector(`.${CSS_CLASSES.MEMO_CONTENT}`) as HTMLElement;
     const footer = this.element.querySelector(`.${CSS_CLASSES.MEMO_FOOTER}`) as HTMLElement;
     const minimizeBtn = this.element.querySelector('.memo-sticky-minimize-btn') as HTMLElement;
-    const timestampSpan = this.element.querySelector('.memo-sticky-timestamp') as HTMLElement;
 
     this.memo.isMinimized = !this.memo.isMinimized;
 
     if (this.memo.isMinimized) {
-      // 最小化：コンテンツとフッター、日時を非表示、幅を最小限に
+      // 最小化：コンテンツとフッターを非表示、幅を最小限に
       content.style.display = 'none';
       footer.style.display = 'none';
-      if (timestampSpan) timestampSpan.style.display = 'none';
       this.element.style.height = 'auto';
       this.element.style.width = 'auto';
       this.element.style.minWidth = '70px';
       minimizeBtn.innerHTML = '+';
       minimizeBtn.title = '展開';
     } else {
-      // 展開：コンテンツとフッター、日時を表示
+      // 展開：コンテンツとフッターを表示
       content.style.display = 'block';
       footer.style.display = 'block';
-      if (timestampSpan) timestampSpan.style.display = 'inline';
       this.element.style.height = `${this.memo.style.height}px`;
       this.element.style.width = `${this.memo.style.width}px`;
       this.element.style.minWidth = '';
@@ -465,7 +461,6 @@ export class MemoComponent {
     const content = this.element.querySelector(`.${CSS_CLASSES.MEMO_CONTENT}`) as HTMLElement;
     const footer = this.element.querySelector(`.${CSS_CLASSES.MEMO_FOOTER}`) as HTMLElement;
     const minimizeBtn = this.element.querySelector('.memo-sticky-minimize-btn') as HTMLElement;
-    const timestampSpan = this.element.querySelector('.memo-sticky-timestamp') as HTMLElement;
 
     // 最小化状態に応じてサイズを設定
     if (memo.isMinimized) {
@@ -474,7 +469,6 @@ export class MemoComponent {
       this.element.style.minWidth = '70px';
       content.style.display = 'none';
       footer.style.display = 'none';
-      if (timestampSpan) timestampSpan.style.display = 'none';
       minimizeBtn.innerHTML = '+';
       minimizeBtn.title = '展開';
     } else {
@@ -483,7 +477,6 @@ export class MemoComponent {
       this.element.style.minWidth = '';
       content.style.display = 'block';
       footer.style.display = 'block';
-      if (timestampSpan) timestampSpan.style.display = 'inline';
       minimizeBtn.innerHTML = '−';
       minimizeBtn.title = '最小化';
     }
