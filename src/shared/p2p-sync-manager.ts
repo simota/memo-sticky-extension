@@ -20,6 +20,7 @@ export class P2PSyncManager {
   private settings: Settings | null = null;
   private userId: string;
   private currentUrl: string;
+  private pendingInitialSyncPeers: Set<string> = new Set(); // 設定ロード前に接続したピア
 
   constructor(userId: string) {
     this.userId = userId;
@@ -35,11 +36,20 @@ export class P2PSyncManager {
       // P2P接続を確立
       await this.p2pClient.initialize(signalingServerUrl);
 
-      // 設定を取得
+      // データ受信リスナーを先にセットアップ（設定取得前に登録してデータ消失を防ぐ）
+      this.setupDataListeners();
+
+      // 設定を取得（非同期処理で時間がかかる可能性がある）
       this.settings = await StorageManager.getSettings();
 
-      // データ受信リスナーをセットアップ
-      this.setupDataListeners();
+      // 設定ロード前に接続したピアに初期同期を送信
+      if (this.pendingInitialSyncPeers.size > 0) {
+        console.log(`🔄 Sending pending initial syncs to ${this.pendingInitialSyncPeers.size} peer(s)...`);
+        for (const peerId of this.pendingInitialSyncPeers) {
+          await this.sendInitialSync(peerId);
+        }
+        this.pendingInitialSyncPeers.clear();
+      }
 
       console.log('✅ P2P sync manager initialized');
     } catch (error) {
@@ -69,7 +79,8 @@ export class P2PSyncManager {
    */
   private async sendInitialSync(peerId: string): Promise<void> {
     if (!this.settings) {
-      console.warn('⚠️ Settings not loaded, skipping initial sync');
+      console.warn(`⚠️ Settings not loaded, buffering initial sync for ${peerId}`);
+      this.pendingInitialSyncPeers.add(peerId);
       return;
     }
 
@@ -171,13 +182,25 @@ export class P2PSyncManager {
     console.log('📍 Current URL:', this.currentUrl);
 
     // URL正規化して比較（removeQueryParams設定を考慮）
-    const removeQuery = this.settings?.removeQueryParams || false;
-    const normalizedSyncUrl = normalizeUrl(url, removeQuery);
-    const normalizedCurrentUrl = normalizeUrl(this.currentUrl, removeQuery);
-    const urlsMatch = normalizedSyncUrl === normalizedCurrentUrl;
+    let urlsMatch = false;
+    if (this.settings) {
+      const removeQuery = this.settings.removeQueryParams;
+      const normalizedSyncUrl = normalizeUrl(url, removeQuery);
+      const normalizedCurrentUrl = normalizeUrl(this.currentUrl, removeQuery);
+      urlsMatch = normalizedSyncUrl === normalizedCurrentUrl;
+      console.log('📍 Using settings removeQueryParams:', removeQuery);
+      console.log('📍 Normalized Sync URL:', normalizedSyncUrl);
+      console.log('📍 Normalized Current URL:', normalizedCurrentUrl);
+    } else {
+      // 設定未ロード時は両方のパターンを試行
+      const matchWithQuery = normalizeUrl(url, false) === normalizeUrl(this.currentUrl, false);
+      const matchWithoutQuery = normalizeUrl(url, true) === normalizeUrl(this.currentUrl, true);
+      urlsMatch = matchWithQuery || matchWithoutQuery;
+      console.log('⚠️ Settings not yet loaded, trying both URL patterns');
+      console.log('📍 Match with query:', matchWithQuery);
+      console.log('📍 Match without query:', matchWithoutQuery);
+    }
 
-    console.log('📍 Normalized Sync URL:', normalizedSyncUrl);
-    console.log('📍 Normalized Current URL:', normalizedCurrentUrl);
     console.log('📍 URLs match:', urlsMatch);
     console.log('📊 Data:', memos.length, 'memos,', highlights.length, 'highlights,', drawings.length, 'drawings');
 
@@ -201,13 +224,25 @@ export class P2PSyncManager {
     console.log('📍 Current URL:', this.currentUrl);
 
     // URL正規化して比較（removeQueryParams設定を考慮）
-    const removeQuery = this.settings?.removeQueryParams || false;
-    const normalizedMemoUrl = normalizeUrl(memo.url, removeQuery);
-    const normalizedCurrentUrl = normalizeUrl(this.currentUrl, removeQuery);
-    const urlsMatch = normalizedMemoUrl === normalizedCurrentUrl;
+    let urlsMatch = false;
+    if (this.settings) {
+      const removeQuery = this.settings.removeQueryParams;
+      const normalizedMemoUrl = normalizeUrl(memo.url, removeQuery);
+      const normalizedCurrentUrl = normalizeUrl(this.currentUrl, removeQuery);
+      urlsMatch = normalizedMemoUrl === normalizedCurrentUrl;
+      console.log('📍 Using settings removeQueryParams:', removeQuery);
+      console.log('📍 Normalized Memo URL:', normalizedMemoUrl);
+      console.log('📍 Normalized Current URL:', normalizedCurrentUrl);
+    } else {
+      // 設定未ロード時は両方のパターンを試行
+      const matchWithQuery = normalizeUrl(memo.url, false) === normalizeUrl(this.currentUrl, false);
+      const matchWithoutQuery = normalizeUrl(memo.url, true) === normalizeUrl(this.currentUrl, true);
+      urlsMatch = matchWithQuery || matchWithoutQuery;
+      console.log('⚠️ Settings not yet loaded, trying both URL patterns');
+      console.log('📍 Match with query:', matchWithQuery);
+      console.log('📍 Match without query:', matchWithoutQuery);
+    }
 
-    console.log('📍 Normalized Memo URL:', normalizedMemoUrl);
-    console.log('📍 Normalized Current URL:', normalizedCurrentUrl);
     console.log('📍 URLs match:', urlsMatch);
 
     // 現在のURLと一致する場合のみ表示
@@ -226,10 +261,42 @@ export class P2PSyncManager {
    * メモ更新を処理
    */
   private handleMemoUpdate(memo: Memo, peerId: string): void {
-    const sharedMemo: SharedMemo = { ...memo, ownerId: peerId };
-    window.dispatchEvent(new CustomEvent('p2p:memo-updated', {
-      detail: sharedMemo
-    }));
+    console.log('🎯 Handling memo update from', peerId);
+    console.log('📍 Memo URL:', memo.url);
+    console.log('📍 Current URL:', this.currentUrl);
+
+    // URL正規化して比較（removeQueryParams設定を考慮）
+    let urlsMatch = false;
+    if (this.settings) {
+      const removeQuery = this.settings.removeQueryParams;
+      const normalizedMemoUrl = normalizeUrl(memo.url, removeQuery);
+      const normalizedCurrentUrl = normalizeUrl(this.currentUrl, removeQuery);
+      urlsMatch = normalizedMemoUrl === normalizedCurrentUrl;
+      console.log('📍 Using settings removeQueryParams:', removeQuery);
+      console.log('📍 Normalized Memo URL:', normalizedMemoUrl);
+      console.log('📍 Normalized Current URL:', normalizedCurrentUrl);
+    } else {
+      // 設定未ロード時は両方のパターンを試行
+      const matchWithQuery = normalizeUrl(memo.url, false) === normalizeUrl(this.currentUrl, false);
+      const matchWithoutQuery = normalizeUrl(memo.url, true) === normalizeUrl(this.currentUrl, true);
+      urlsMatch = matchWithQuery || matchWithoutQuery;
+      console.log('⚠️ Settings not yet loaded, trying both URL patterns');
+      console.log('📍 Match with query:', matchWithQuery);
+      console.log('📍 Match without query:', matchWithoutQuery);
+    }
+
+    console.log('📍 URLs match:', urlsMatch);
+
+    // 現在のURLと一致する場合のみ表示
+    if (urlsMatch) {
+      const sharedMemo: SharedMemo = { ...memo, ownerId: peerId };
+      console.log('📢 Dispatching p2p:memo-updated event', sharedMemo);
+      window.dispatchEvent(new CustomEvent('p2p:memo-updated', {
+        detail: sharedMemo
+      }));
+    } else {
+      console.log('⏭️ Skipping memo update (URL mismatch)');
+    }
   }
 
   /**
