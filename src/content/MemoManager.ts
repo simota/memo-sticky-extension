@@ -14,6 +14,8 @@ export class MemoManager {
   private createMode: boolean = false;
   private currentUrl: string;
   private nextZIndex: number = Z_INDEX.MIN;
+  private createModeClickHandler: ((e: MouseEvent) => void) | null = null;
+  private createModeCancelHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor() {
     this.currentUrl = window.location.href;
@@ -184,17 +186,30 @@ export class MemoManager {
       document.body.classList.add(CSS_CLASSES.CREATE_MODE);
       document.body.style.cursor = 'crosshair';
 
-      // クリックイベントを追加
-      document.addEventListener('click', this.handleCreateModeClick, { once: true });
+      // クリックハンドラーを作成して保持
+      this.createModeClickHandler = (e: MouseEvent) => {
+        // メモ要素のクリックは無視
+        if ((e.target as HTMLElement).closest(`.${CSS_CLASSES.MEMO_CONTAINER}`)) {
+          return;
+        }
 
-      // Escキーでキャンセル
-      const cancelHandler = (e: KeyboardEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        this.createMemo(e.clientX, e.clientY);
+        this.exitCreateMode();
+      };
+
+      // Escキーでキャンセルするハンドラーを作成して保持
+      this.createModeCancelHandler = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
           this.exitCreateMode();
-          document.removeEventListener('keydown', cancelHandler);
         }
       };
-      document.addEventListener('keydown', cancelHandler);
+
+      // イベントリスナーを登録
+      document.addEventListener('click', this.createModeClickHandler);
+      document.addEventListener('keydown', this.createModeCancelHandler);
     } else {
       this.exitCreateMode();
     }
@@ -207,23 +222,18 @@ export class MemoManager {
     this.createMode = false;
     document.body.classList.remove(CSS_CLASSES.CREATE_MODE);
     document.body.style.cursor = '';
-  }
 
-  /**
-   * 作成モードでのクリックハンドラー
-   */
-  private handleCreateModeClick = (e: MouseEvent): void => {
-    // メモ要素のクリックは無視
-    if ((e.target as HTMLElement).closest(`.${CSS_CLASSES.MEMO_CONTAINER}`)) {
-      return;
+    // イベントリスナーを明示的に解除
+    if (this.createModeClickHandler) {
+      document.removeEventListener('click', this.createModeClickHandler);
+      this.createModeClickHandler = null;
     }
 
-    e.preventDefault();
-    e.stopPropagation();
-
-    this.createMemo(e.clientX, e.clientY);
-    this.exitCreateMode();
-  };
+    if (this.createModeCancelHandler) {
+      document.removeEventListener('keydown', this.createModeCancelHandler);
+      this.createModeCancelHandler = null;
+    }
+  }
 
   /**
    * ストレージの変更を監視

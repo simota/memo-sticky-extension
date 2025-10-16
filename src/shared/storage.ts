@@ -25,13 +25,35 @@ export class StorageManager {
 
   /**
    * 特定URLのメモを取得
+   *
+   * フォールバック機能:
+   * - removeQueryParams設定を後から変更した場合でも、両方のキーを試す
+   * - メインキーで見つからない場合、逆のキー（クエリあり/なし）も探す
    */
   static async getMemosForUrl(url: string, settings?: Settings): Promise<Memo[]> {
     try {
       const removeQuery = settings?.removeQueryParams ?? false;
       const normalizedUrl = normalizeUrl(url, removeQuery);
       const allMemos = await this.getAllMemos();
-      return allMemos[normalizedUrl] || [];
+
+      // メインキーでメモを取得
+      let memos = allMemos[normalizedUrl];
+
+      // メモが見つからない場合、逆のキーでフォールバック
+      if (!memos || memos.length === 0) {
+        const fallbackUrl = normalizeUrl(url, !removeQuery);
+        memos = allMemos[fallbackUrl];
+
+        // フォールバックで見つかった場合、メインキーに移行
+        if (memos && memos.length > 0) {
+          console.log(`Migrating memos from ${fallbackUrl} to ${normalizedUrl}`);
+          allMemos[normalizedUrl] = memos;
+          delete allMemos[fallbackUrl];
+          await chrome.storage.local.set({ [STORAGE_KEYS.MEMOS]: allMemos });
+        }
+      }
+
+      return memos || [];
     } catch (error) {
       console.error('Failed to get memos for URL:', error);
       return [];
