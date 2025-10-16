@@ -7,6 +7,7 @@ import { StorageManager } from '../shared/storage';
 // DOM要素
 const enableToggle = document.getElementById('enableToggle') as HTMLInputElement;
 const createMemoBtn = document.getElementById('createMemoBtn') as HTMLButtonElement;
+const toggleDrawingBtn = document.getElementById('toggleDrawingBtn') as HTMLButtonElement;
 const exportBtn = document.getElementById('exportBtn') as HTMLButtonElement;
 const importBtn = document.getElementById('importBtn') as HTMLButtonElement;
 const importFileInput = document.getElementById('importFileInput') as HTMLInputElement;
@@ -50,6 +51,23 @@ function setupEventListeners(): void {
     if (tab.id) {
       chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO' });
       window.close();
+    }
+  });
+
+  // 描画モード切り替え
+  toggleDrawingBtn.addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (tab.id) {
+      chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_DRAWING_MODE' }, (response) => {
+        if (response?.enabled) {
+          toggleDrawingBtn.textContent = '描画モード: ON';
+          toggleDrawingBtn.classList.add('active');
+        } else {
+          toggleDrawingBtn.textContent = '描画モード: OFF';
+          toggleDrawingBtn.classList.remove('active');
+        }
+      });
     }
   });
 

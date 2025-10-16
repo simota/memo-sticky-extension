@@ -52,6 +52,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
       });
     });
 
+    // 描画関連
+    chrome.contextMenus.create({
+      id: 'toggle-drawing',
+      title: '描画モード ON/OFF',
+      contexts: ['page']
+    });
+
     console.log('Context menus created');
   } catch (error) {
     console.error('Failed to create context menus:', error);
@@ -60,13 +67,16 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 // コマンドリスナー（キーボードショートカット）
 chrome.commands.onCommand.addListener(async (command) => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!tab.id) return;
+
   if (command === 'create-memo') {
     // アクティブなタブにメッセージを送信
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-    if (tab.id) {
-      chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO' });
-    }
+    chrome.tabs.sendMessage(tab.id, { type: 'CREATE_MEMO' });
+  } else if (command === 'toggle-drawing') {
+    // 描画モードを切り替え
+    chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_DRAWING_MODE' });
   }
 });
 
@@ -143,6 +153,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         color: colorInfo.bg
       });
     }
+  } else if (menuId === 'toggle-drawing') {
+    // 描画モードを切り替え
+    chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE_DRAWING_MODE' });
   }
 });
 

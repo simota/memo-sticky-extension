@@ -38,6 +38,13 @@
         "mac": "Command+Shift+M"
       },
       "description": "新しいメモを作成"
+    },
+    "toggle-drawing": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+D",
+        "mac": "Command+Shift+D"
+      },
+      "description": "描画モード ON/OFF"
     }
   },
   "icons": {

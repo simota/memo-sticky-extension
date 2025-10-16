@@ -2,7 +2,7 @@
  * 描画管理 - SVG描画機能を提供
  */
 
-import { Drawing, Settings } from '../shared/types';
+import { Drawing, Settings, DRAWING_COLORS } from '../shared/types';
 import { StorageManager } from '../shared/storage';
 import { generateId, getCurrentTimestamp } from '../shared/utils';
 import { CSS_CLASSES, Z_INDEX } from '../shared/constants';
@@ -14,6 +14,7 @@ export class DrawingManager {
   private currentUrl: string;
   private drawingMode: boolean = false;
   private svgCanvas: SVGSVGElement | null = null;
+  private toolbar: HTMLDivElement | null = null;
   private currentPath: SVGPathElement | null = null;
   private currentPathData: string = '';
   private isDrawing: boolean = false;
@@ -67,6 +68,9 @@ export class DrawingManager {
           if (element) {
             this.svgCanvas.appendChild(element);
             this.drawings.set(drawing.id, component);
+
+            // クリックで削除できるようにする
+            this.setupDrawingClickHandler(element, drawing.id);
           }
         }
       });
@@ -106,6 +110,139 @@ export class DrawingManager {
   }
 
   /**
+   * 描画ツールバーを作成
+   */
+  private createToolbar(): void {
+    if (this.toolbar) return;
+
+    this.toolbar = document.createElement('div');
+    this.toolbar.classList.add(CSS_CLASSES.DRAWING_TOOLBAR);
+    this.toolbar.style.cssText = `
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      background: white;
+      border: 2px solid #333;
+      border-radius: 8px;
+      padding: 12px;
+      z-index: ${Z_INDEX.MAX + 10};
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    `;
+
+    // 色選択セクション
+    const colorSection = document.createElement('div');
+    colorSection.innerHTML = '<div style="font-size: 12px; font-weight: bold; margin-bottom: 6px;">色</div>';
+    const colorButtons = document.createElement('div');
+    colorButtons.style.cssText = 'display: flex; gap: 6px; flex-wrap: wrap;';
+
+    DRAWING_COLORS.forEach(colorInfo => {
+      const btn = document.createElement('button');
+      btn.style.cssText = `
+        width: 28px;
+        height: 28px;
+        border: 2px solid ${this.currentColor === colorInfo.color ? '#000' : '#ccc'};
+        border-radius: 4px;
+        background: ${colorInfo.color};
+        cursor: pointer;
+        transition: border-color 0.2s;
+      `;
+      btn.title = colorInfo.name;
+      btn.addEventListener('click', () => {
+        this.currentColor = colorInfo.color;
+        this.updateToolbarUI();
+      });
+      colorButtons.appendChild(btn);
+    });
+
+    colorSection.appendChild(colorButtons);
+    this.toolbar.appendChild(colorSection);
+
+    // 太さ選択セクション
+    const widthSection = document.createElement('div');
+    widthSection.innerHTML = '<div style="font-size: 12px; font-weight: bold; margin-bottom: 6px;">太さ</div>';
+    const widthButtons = document.createElement('div');
+    widthButtons.style.cssText = 'display: flex; gap: 6px;';
+
+    [1, 3, 5, 8].forEach(width => {
+      const btn = document.createElement('button');
+      btn.style.cssText = `
+        width: 32px;
+        height: 32px;
+        border: 2px solid ${this.currentStrokeWidth === width ? '#000' : '#ccc'};
+        border-radius: 4px;
+        background: white;
+        cursor: pointer;
+        font-size: 11px;
+        transition: border-color 0.2s;
+      `;
+      btn.textContent = `${width}px`;
+      btn.addEventListener('click', () => {
+        this.currentStrokeWidth = width;
+        this.updateToolbarUI();
+      });
+      widthButtons.appendChild(btn);
+    });
+
+    widthSection.appendChild(widthButtons);
+    this.toolbar.appendChild(widthSection);
+
+    // 閉じるボタン
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '閉じる';
+    closeBtn.style.cssText = `
+      width: 100%;
+      padding: 8px;
+      background: #f44336;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+    `;
+    closeBtn.addEventListener('click', () => {
+      this.toggleDrawingMode();
+    });
+    this.toolbar.appendChild(closeBtn);
+
+    document.body.appendChild(this.toolbar);
+  }
+
+  /**
+   * ツールバーUIを更新
+   */
+  private updateToolbarUI(): void {
+    if (!this.toolbar) return;
+
+    // 色ボタンの枠線を更新
+    const colorButtons = this.toolbar.querySelectorAll('button[title]');
+    colorButtons.forEach((btn, index) => {
+      if (index < DRAWING_COLORS.length) {
+        const colorInfo = DRAWING_COLORS[index];
+        (btn as HTMLButtonElement).style.border =
+          this.currentColor === colorInfo.color ? '2px solid #000' : '2px solid #ccc';
+      }
+    });
+
+    // 太さボタンの枠線を更新
+    const widthButtons = this.toolbar.querySelectorAll('button');
+    const widths = [1, 3, 5, 8];
+    widthButtons.forEach((btn) => {
+      const text = btn.textContent;
+      if (text && text.includes('px')) {
+        const width = parseInt(text);
+        if (widths.includes(width)) {
+          btn.style.border =
+            this.currentStrokeWidth === width ? '2px solid #000' : '2px solid #ccc';
+        }
+      }
+    });
+  }
+
+  /**
    * 描画モードを切り替え
    */
   toggleDrawingMode = (): void => {
@@ -121,6 +258,12 @@ export class DrawingManager {
         this.svgCanvas.style.cursor = 'crosshair';
       }
 
+      // ツールバーを作成・表示
+      this.createToolbar();
+      if (this.toolbar) {
+        this.toolbar.style.display = 'flex';
+      }
+
       document.body.classList.add(CSS_CLASSES.DRAWING_MODE);
 
       // イベントリスナーを追加
@@ -131,6 +274,11 @@ export class DrawingManager {
       if (this.svgCanvas) {
         this.svgCanvas.style.pointerEvents = 'none';
         this.svgCanvas.style.cursor = '';
+      }
+
+      // ツールバーを非表示
+      if (this.toolbar) {
+        this.toolbar.style.display = 'none';
       }
 
       document.body.classList.remove(CSS_CLASSES.DRAWING_MODE);
@@ -201,6 +349,9 @@ export class DrawingManager {
     component['element'] = this.currentPath;
     this.drawings.set(drawing.id, component);
 
+    // クリックで削除できるようにする
+    this.setupDrawingClickHandler(this.currentPath, drawing.id);
+
     this.saveDrawing(drawing);
 
     this.currentPath = null;
@@ -213,10 +364,10 @@ export class DrawingManager {
   private getPoint(e: PointerEvent): { x: number; y: number } {
     if (!this.svgCanvas) return { x: 0, y: 0 };
 
-    const rect = this.svgCanvas.getBoundingClientRect();
+    // position: absolute のSVGなので、pageX/Yを使用
     return {
-      x: e.clientX - rect.left + window.scrollX,
-      y: e.clientY - rect.top + window.scrollY
+      x: e.pageX,
+      y: e.pageY
     };
   }
 
@@ -229,6 +380,40 @@ export class DrawingManager {
       console.log('Drawing saved:', drawing.id);
     } catch (error) {
       console.error('Failed to save drawing:', error);
+    }
+  };
+
+  /**
+   * 描画要素にクリックハンドラーを設定
+   */
+  private setupDrawingClickHandler(element: SVGElement, drawingId: string): void {
+    element.style.cursor = 'pointer';
+    element.style.pointerEvents = 'auto';
+
+    element.addEventListener('click', async (e) => {
+      e.stopPropagation();
+
+      if (confirm('この描画を削除しますか？')) {
+        await this.deleteDrawing(drawingId);
+      }
+    });
+  }
+
+  /**
+   * 描画を削除
+   */
+  private deleteDrawing = async (drawingId: string): Promise<void> => {
+    try {
+      const component = this.drawings.get(drawingId);
+      if (component) {
+        component.destroy();
+        this.drawings.delete(drawingId);
+      }
+
+      await StorageManager.deleteDrawing(drawingId, this.currentUrl, this.settings);
+      console.log('Drawing deleted:', drawingId);
+    } catch (error) {
+      console.error('Failed to delete drawing:', error);
     }
   };
 

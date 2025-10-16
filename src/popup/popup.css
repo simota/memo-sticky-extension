@@ -136,6 +136,21 @@ body {
   background: #e0e0e0;
 }
 
+.btn-drawing {
+  background: linear-gradient(135deg, #FFA500 0%, #FF6347 100%);
+  color: white;
+  margin-bottom: 16px;
+}
+
+.btn-drawing:hover {
+  opacity: 0.9;
+}
+
+.btn-drawing.active {
+  background: linear-gradient(135deg, #32CD32 0%, #228B22 100%);
+  box-shadow: 0 0 12px rgba(50, 205, 50, 0.5);
+}
+
 /* 統計 */
 .stats {
   padding: 12px;
