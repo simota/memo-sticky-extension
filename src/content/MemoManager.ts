@@ -49,6 +49,9 @@ export class MemoManager {
       // 右クリック位置を保存
       this.setupContextMenuListener();
 
+      // ページ離脱時に未保存のメモを保存
+      this.setupBeforeUnloadListener();
+
       console.log('MemoManager initialized');
     } catch (error) {
       console.error('Failed to initialize MemoManager:', error);
@@ -169,8 +172,9 @@ export class MemoManager {
    */
   private saveMemo = async (memo: Memo): Promise<void> => {
     try {
+      console.log('Saving memo:', memo.id, 'Content:', memo.content);
       await StorageManager.saveMemo(memo, this.settings);
-      console.log('Memo saved:', memo.id);
+      console.log('Memo saved successfully:', memo.id);
     } catch (error) {
       console.error('Failed to save memo:', error);
     }
@@ -297,6 +301,17 @@ export class MemoManager {
         x: e.clientX,
         y: e.clientY
       };
+    });
+  }
+
+  /**
+   * ページ離脱時に未保存のメモを強制保存
+   */
+  private setupBeforeUnloadListener(): void {
+    window.addEventListener('beforeunload', () => {
+      console.log('Page unloading, flushing pending saves...');
+      // デバウンス中の保存を即座に実行
+      this.debouncedSaveMemo.flush();
     });
   }
 

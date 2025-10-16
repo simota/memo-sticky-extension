@@ -27,23 +27,40 @@ export function normalizeUrl(url: string, removeQuery: boolean = false): string 
 }
 
 /**
- * デバウンス関数
+ * デバウンス関数（flush機能付き）
  */
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number
-): (...args: Parameters<T>) => void {
+): ((...args: Parameters<T>) => void) & { flush: () => void } {
   let timeout: ReturnType<typeof setTimeout> | null = null;
+  let lastArgs: Parameters<T> | null = null;
 
-  return function(...args: Parameters<T>) {
+  const debounced = function(...args: Parameters<T>) {
+    lastArgs = args;
     if (timeout) {
       clearTimeout(timeout);
     }
 
     timeout = setTimeout(() => {
       func(...args);
+      lastArgs = null;
     }, wait);
   };
+
+  // 即座に実行するflushメソッドを追加
+  debounced.flush = function() {
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    if (lastArgs) {
+      func(...lastArgs);
+      lastArgs = null;
+    }
+  };
+
+  return debounced as typeof debounced & { flush: () => void };
 }
 
 /**

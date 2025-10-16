@@ -212,6 +212,7 @@ export class MemoComponent {
     content.addEventListener('input', () => {
       this.memo.content = content.textContent || '';
       this.memo.updatedAt = Date.now();
+      console.log('Content updated:', this.memo.id, this.memo.content);
       this.onUpdate(this.memo);
     });
 

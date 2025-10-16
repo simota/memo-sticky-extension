@@ -16,7 +16,7 @@ export const Z_INDEX = {
 
 // デバウンス時間（ミリ秒）
 export const DEBOUNCE_TIME = {
-  SAVE: 1000,
+  SAVE: 500,
   RESIZE: 100
 } as const;
 
