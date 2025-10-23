@@ -149,6 +149,29 @@ export class HighlightManager {
   };
 
   /**
+   * SPAなどでのURL変更時に状態を更新
+   */
+  async handleUrlChange(newUrl: string): Promise<void> {
+    if (newUrl === this.currentUrl) {
+      return;
+    }
+
+    console.log(`🔄 HighlightManager URL change detected: ${this.currentUrl} -> ${newUrl}`);
+
+    this.highlights.forEach(component => component.delete());
+    this.highlights.clear();
+
+    this.currentUrl = newUrl;
+
+    if (this.settings?.enabled === false) {
+      console.log('HighlightManager disabled via settings, skipping reload for new URL');
+      return;
+    }
+
+    await this.loadHighlights();
+  }
+
+  /**
    * メッセージリスナーを設定
    */
   private setupMessageListener(): void {

@@ -506,6 +506,45 @@ export class MemoManager {
   };
 
   /**
+   * SPAなどでURLが変化した際のリフレッシュ処理
+   */
+  async handleUrlChange(newUrl: string): Promise<void> {
+    if (newUrl === this.currentUrl) {
+      return;
+    }
+
+    console.log(`🔄 MemoManager URL change detected: ${this.currentUrl} -> ${newUrl}`);
+
+    // 保留中の保存を反映
+    this.debouncedSaveMemo.flush();
+
+    // 作成モード中であれば解除
+    if (this.createMode) {
+      this.exitCreateMode();
+    }
+
+    // 既存のメモを破棄
+    this.memos.forEach(component => component.destroy());
+    this.memos.clear();
+
+    this.sharedMemos.forEach(component => component.destroy());
+    this.sharedMemos.clear();
+
+    this.nextZIndex = Z_INDEX.MIN;
+    this.lastContextMenuPosition = null;
+
+    this.currentUrl = newUrl;
+    this.p2pSyncManager?.setCurrentUrl(newUrl);
+
+    if (this.settings?.enabled === false) {
+      console.log('MemoManager disabled via settings, skipping reload for new URL');
+      return;
+    }
+
+    await this.loadMemos();
+  }
+
+  /**
    * メモ作成モードの切り替え
    */
   toggleCreateMode = (): void => {

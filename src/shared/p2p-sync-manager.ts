@@ -75,6 +75,18 @@ export class P2PSyncManager {
   }
 
   /**
+   * 現在のURLを更新（SPA遷移などに対応）
+   */
+  setCurrentUrl(newUrl: string): void {
+    if (this.currentUrl === newUrl) {
+      return;
+    }
+
+    console.log(`🔁 P2PSyncManager current URL updated: ${this.currentUrl} -> ${newUrl}`);
+    this.currentUrl = newUrl;
+  }
+
+  /**
    * 初期同期データを送信
    */
   private async sendInitialSync(peerId: string): Promise<void> {

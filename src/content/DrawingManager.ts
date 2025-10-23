@@ -561,6 +561,78 @@ export class DrawingManager {
   };
 
   /**
+   * SPAなどでURLが変化した際に描画状態を更新
+   */
+  async handleUrlChange(newUrl: string): Promise<void> {
+    if (newUrl === this.currentUrl) {
+      return;
+    }
+
+    console.log(`🔄 DrawingManager URL change detected: ${this.currentUrl} -> ${newUrl}`);
+
+    if (this.drawingMode) {
+      this.toggleDrawingMode();
+    }
+
+    if (this.currentPath && this.currentPath.parentNode) {
+      this.currentPath.parentNode.removeChild(this.currentPath);
+    }
+    this.currentPath = null;
+    this.currentPathData = '';
+    this.isDrawing = false;
+
+    this.drawings.forEach(component => component.destroy());
+    this.drawings.clear();
+
+    this.sharedDrawings.forEach(component => component.destroy());
+    this.sharedDrawings.clear();
+
+    if (this.svgCanvas) {
+      const svg = this.svgCanvas;
+      while (svg.firstChild) {
+        svg.removeChild(svg.firstChild);
+      }
+      svg.style.pointerEvents = 'none';
+      svg.style.cursor = '';
+      svg.style.height = `${document.documentElement.scrollHeight}px`;
+    }
+
+    if (this.toolbar) {
+      this.toolbar.style.display = 'none';
+    }
+
+    this.currentUrl = newUrl;
+    this.p2pSyncManager?.setCurrentUrl(newUrl);
+
+    if (this.settings.enabled === false) {
+      console.log('DrawingManager disabled via settings, skipping reload for new URL');
+      this.ensureCanvasInactive();
+      return;
+    }
+
+    await this.loadDrawings();
+  }
+
+  private ensureCanvasInactive(): void {
+    this.drawingMode = false;
+
+    if (this.svgCanvas) {
+      this.svgCanvas.style.pointerEvents = 'none';
+      this.svgCanvas.style.cursor = '';
+
+      this.svgCanvas.removeEventListener('pointerdown', this.handlePointerDown);
+      this.svgCanvas.removeEventListener('pointermove', this.handlePointerMove);
+      this.svgCanvas.removeEventListener('pointerup', this.handlePointerUp);
+    }
+
+    if (this.toolbar) {
+      this.toolbar.style.display = 'none';
+    }
+
+    document.body.classList.remove(CSS_CLASSES.DRAWING_MODE);
+  }
+
+  /**
    * ウィンドウリサイズリスナーを設定
    */
   private setupResizeListener(): void {
