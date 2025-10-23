@@ -604,12 +604,32 @@ export class DrawingManager {
     this.currentUrl = newUrl;
     this.p2pSyncManager?.setCurrentUrl(newUrl);
 
-    if (!this.settings.enabled) {
+    if (this.settings.enabled === false) {
       console.log('DrawingManager disabled via settings, skipping reload for new URL');
+      this.ensureCanvasInactive();
       return;
     }
 
     await this.loadDrawings();
+  }
+
+  private ensureCanvasInactive(): void {
+    this.drawingMode = false;
+
+    if (this.svgCanvas) {
+      this.svgCanvas.style.pointerEvents = 'none';
+      this.svgCanvas.style.cursor = '';
+
+      this.svgCanvas.removeEventListener('pointerdown', this.handlePointerDown);
+      this.svgCanvas.removeEventListener('pointermove', this.handlePointerMove);
+      this.svgCanvas.removeEventListener('pointerup', this.handlePointerUp);
+    }
+
+    if (this.toolbar) {
+      this.toolbar.style.display = 'none';
+    }
+
+    document.body.classList.remove(CSS_CLASSES.DRAWING_MODE);
   }
 
   /**
