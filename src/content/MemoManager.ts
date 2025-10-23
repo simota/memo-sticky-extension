@@ -536,7 +536,7 @@ export class MemoManager {
     this.currentUrl = newUrl;
     this.p2pSyncManager?.setCurrentUrl(newUrl);
 
-    if (!this.settings.enabled) {
+    if (this.settings?.enabled === false) {
       console.log('MemoManager disabled via settings, skipping reload for new URL');
       return;
     }
