@@ -163,7 +163,7 @@ export class HighlightManager {
 
     this.currentUrl = newUrl;
 
-    if (!this.settings.enabled) {
+    if (this.settings?.enabled === false) {
       console.log('HighlightManager disabled via settings, skipping reload for new URL');
       return;
     }
