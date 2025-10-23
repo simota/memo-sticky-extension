@@ -10,6 +10,70 @@ import { DrawingManager } from './DrawingManager';
 let memoManager: MemoManager | null = null;
 let highlightManager: HighlightManager | null = null;
 let drawingManager: DrawingManager | null = null;
+let spaNavigationHandlerInitialized = false;
+
+/**
+ * SPA遷移に対応するためのURL変更監視をセットアップ
+ */
+function setupSpaNavigationHandling(): void {
+  if (spaNavigationHandlerInitialized) {
+    return;
+  }
+
+  spaNavigationHandlerInitialized = true;
+  let lastUrl = window.location.href;
+
+  const applyUrlChangeToManagers = async (url: string): Promise<void> => {
+    console.log('🔄 Detected SPA navigation, refreshing managers for URL:', url);
+
+    try {
+      if (memoManager) {
+        await memoManager.handleUrlChange(url);
+      }
+
+      if (highlightManager) {
+        await highlightManager.handleUrlChange(url);
+      }
+
+      if (drawingManager) {
+        await drawingManager.handleUrlChange(url);
+      }
+    } catch (error) {
+      console.error('Failed to refresh managers after SPA navigation:', error);
+    }
+  };
+
+  const checkForUrlChange = () => {
+    const currentUrl = window.location.href;
+    if (currentUrl === lastUrl) {
+      return;
+    }
+
+    lastUrl = currentUrl;
+    void applyUrlChangeToManagers(currentUrl);
+  };
+
+  const scheduleUrlCheck = () => {
+    window.requestAnimationFrame(checkForUrlChange);
+  };
+
+  window.addEventListener('popstate', scheduleUrlCheck);
+  window.addEventListener('hashchange', scheduleUrlCheck);
+
+  const originalPushState = history.pushState;
+  history.pushState = function (...args: Parameters<typeof history.pushState>) {
+    const result = originalPushState.apply(this, args);
+    scheduleUrlCheck();
+    return result;
+  };
+
+  const originalReplaceState = history.replaceState;
+  history.replaceState = function (...args: Parameters<typeof history.replaceState>) {
+    const result = originalReplaceState.apply(this, args);
+    scheduleUrlCheck();
+    return result;
+  };
+}
 
 /**
  * 拡張機能を初期化
@@ -33,6 +97,8 @@ function initializeExtension(): void {
     });
 
     console.log('Memo Sticky Extension initialized (Memo + Highlight + Drawing)');
+
+    setupSpaNavigationHandling();
   } catch (error) {
     console.error('Failed to initialize extension:', error);
   }
