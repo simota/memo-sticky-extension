@@ -36,6 +36,15 @@ export interface Memo {
   url: string;
   content: string;
   position: MemoPosition;
+  /**
+   * メモを紐付けたスクロールコンテナのCSSセレクター
+   * （指定がない場合はページ全体に対する固定座標として扱う）
+   */
+  containerSelector?: string;
+  /**
+   * ページ全体における座標のバックアップ（コンテナが見つからない場合に使用）
+   */
+  pagePosition?: { x: number; y: number };
   element?: ElementBinding;
   style: MemoStyle;
   isMinimized?: boolean;

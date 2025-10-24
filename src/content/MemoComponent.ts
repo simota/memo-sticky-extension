@@ -15,51 +15,36 @@ export class MemoComponent {
   private isResizing: boolean = false;
   private dragOffset: { x: number; y: number } = { x: 0, y: 0 };
   private timestampUpdateInterval: ReturnType<typeof setInterval> | null = null;
+  private container: HTMLElement | null;
+  private containerScrollHandler: (() => void) | null = null;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(
     memo: Memo,
     onUpdate: (memo: Memo) => void,
-    onDelete: (memoId: string) => void
+    onDelete: (memoId: string) => void,
+    container?: HTMLElement
   ) {
     this.memo = memo;
     this.onUpdate = onUpdate;
     this.onDelete = onDelete;
+    this.container = container ?? null;
     this.element = this.createElement();
     this.attachEventListeners();
+    this.updateElementPosition();
+    this.setupContainerListeners();
   }
 
   /**
    * DOM要素を作成
    */
   private createElement(): HTMLElement {
-    // ビューポートサイズに基づいてスケーリング計算
-    let scaledX = this.memo.position.x;
-    let scaledY = this.memo.position.y;
-
-    if (this.memo.viewportSize) {
-      const currentWidth = window.innerWidth;
-      const currentHeight = window.innerHeight;
-      const originalWidth = this.memo.viewportSize.width;
-      const originalHeight = this.memo.viewportSize.height;
-
-      // 画面サイズの比率でスケーリング
-      scaledX = (this.memo.position.x / originalWidth) * currentWidth;
-      scaledY = (this.memo.position.y / originalHeight) * currentHeight;
-
-      console.log('📐 Scaling memo position:', {
-        original: { x: this.memo.position.x, y: this.memo.position.y },
-        scaled: { x: scaledX, y: scaledY },
-        viewportOriginal: { width: originalWidth, height: originalHeight },
-        viewportCurrent: { width: currentWidth, height: currentHeight }
-      });
-    }
-
     const container = document.createElement('div');
     container.className = CSS_CLASSES.MEMO_CONTAINER;
     container.style.cssText = `
       position: absolute;
-      left: ${scaledX}px;
-      top: ${scaledY}px;
+      left: 0px;
+      top: 0px;
       width: ${this.memo.style.width}px;
       height: ${this.memo.style.height}px;
       z-index: ${this.memo.style.zIndex};
@@ -309,15 +294,99 @@ export class MemoComponent {
     }, 60000);
   }
 
+  private setupContainerListeners(): void {
+    if (!this.container) {
+      return;
+    }
+
+    this.containerScrollHandler = () => {
+      this.updateElementPosition();
+    };
+    this.container.addEventListener('scroll', this.containerScrollHandler, { passive: true });
+
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.updateElementPosition());
+      this.resizeObserver.observe(this.container);
+    }
+  }
+
+  private cleanupContainerListeners(): void {
+    if (this.container && this.containerScrollHandler) {
+      this.container.removeEventListener('scroll', this.containerScrollHandler);
+    }
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+    this.containerScrollHandler = null;
+  }
+
+  private updateElementPosition(): void {
+    const { x, y } = this.calculatePagePosition();
+    this.element.style.left = `${x}px`;
+    this.element.style.top = `${y}px`;
+    this.memo.pagePosition = { x, y };
+  }
+
+  private calculatePagePosition(): { x: number; y: number } {
+    if (this.container) {
+      const rect = this.container.getBoundingClientRect();
+      const pageLeft = window.scrollX + rect.left;
+      const pageTop = window.scrollY + rect.top;
+      const left = pageLeft + (this.memo.position.x - this.container.scrollLeft);
+      const top = pageTop + (this.memo.position.y - this.container.scrollTop);
+      return { x: left, y: top };
+    }
+
+    if (this.memo.viewportSize) {
+      const currentWidth = window.innerWidth;
+      const currentHeight = window.innerHeight;
+      const originalWidth = this.memo.viewportSize.width || currentWidth;
+      const originalHeight = this.memo.viewportSize.height || currentHeight;
+
+      const scaledX =
+        originalWidth > 0
+          ? (this.memo.position.x / originalWidth) * currentWidth
+          : this.memo.position.x;
+      const scaledY =
+        originalHeight > 0
+          ? (this.memo.position.y / originalHeight) * currentHeight
+          : this.memo.position.y;
+
+      return { x: scaledX, y: scaledY };
+    }
+
+    if (this.memo.pagePosition) {
+      return { x: this.memo.pagePosition.x, y: this.memo.pagePosition.y };
+    }
+
+    return { x: this.memo.position.x, y: this.memo.position.y };
+  }
+
+  private convertPageToAnchor(pageX: number, pageY: number): { x: number; y: number } {
+    if (this.container) {
+      const rect = this.container.getBoundingClientRect();
+      const pageLeft = window.scrollX + rect.left;
+      const pageTop = window.scrollY + rect.top;
+
+      return {
+        x: this.container.scrollLeft + (pageX - pageLeft),
+        y: this.container.scrollTop + (pageY - pageTop)
+      };
+    }
+
+    return { x: pageX, y: pageY };
+  }
+
   /**
    * ドラッグ開始
    */
   private startDrag = (e: MouseEvent): void => {
     this.isDragging = true;
-    // absoluteポジションなので、要素の現在位置からオフセットを計算
+    const currentPosition = this.calculatePagePosition();
     this.dragOffset = {
-      x: e.pageX - this.memo.position.x,
-      y: e.pageY - this.memo.position.y
+      x: e.pageX - currentPosition.x,
+      y: e.pageY - currentPosition.y
     };
     this.element.style.cursor = 'grabbing';
   };
@@ -334,14 +403,16 @@ export class MemoComponent {
    */
   private handleMouseMove = (e: MouseEvent): void => {
     if (this.isDragging) {
-      const x = e.pageX - this.dragOffset.x;
-      const y = e.pageY - this.dragOffset.y;
+      const pageX = e.pageX - this.dragOffset.x;
+      const pageY = e.pageY - this.dragOffset.y;
+      const anchor = this.convertPageToAnchor(pageX, pageY);
 
-      this.element.style.left = `${x}px`;
-      this.element.style.top = `${y}px`;
+      this.element.style.left = `${pageX}px`;
+      this.element.style.top = `${pageY}px`;
 
-      this.memo.position.x = x;
-      this.memo.position.y = y;
+      this.memo.position.x = anchor.x;
+      this.memo.position.y = anchor.y;
+      this.memo.pagePosition = { x: pageX, y: pageY };
     } else if (this.isResizing) {
       const rect = this.element.getBoundingClientRect();
       const width = clamp(
@@ -369,12 +440,15 @@ export class MemoComponent {
   private handleMouseUp = (): void => {
     if (this.isDragging || this.isResizing) {
       // ドラッグ/リサイズ終了時にビューポートサイズを更新
+      const viewportWidth = this.container ? this.container.clientWidth : window.innerWidth;
+      const viewportHeight = this.container ? this.container.clientHeight : window.innerHeight;
       this.memo.viewportSize = {
-        width: window.innerWidth,
-        height: window.innerHeight
+        width: viewportWidth,
+        height: viewportHeight
       };
       this.memo.updatedAt = Date.now();
       this.onUpdate(this.memo);
+      this.updateElementPosition();
     }
 
     this.isDragging = false;
@@ -503,22 +577,16 @@ export class MemoComponent {
   updateMemo(memo: Memo): void {
     this.memo = memo;
 
-    // ビューポートサイズに基づいてスケーリング計算
-    let scaledX = memo.position.x;
-    let scaledY = memo.position.y;
-
-    if (memo.viewportSize) {
-      const currentWidth = window.innerWidth;
-      const currentHeight = window.innerHeight;
-      const originalWidth = memo.viewportSize.width;
-      const originalHeight = memo.viewportSize.height;
-
-      scaledX = (memo.position.x / originalWidth) * currentWidth;
-      scaledY = (memo.position.y / originalHeight) * currentHeight;
+    if (!this.container && memo.containerSelector) {
+      const resolved = document.querySelector<HTMLElement>(memo.containerSelector);
+      if (resolved && resolved !== document.body && resolved !== document.documentElement) {
+        this.cleanupContainerListeners();
+        this.container = resolved;
+        this.setupContainerListeners();
+      }
     }
 
-    this.element.style.left = `${scaledX}px`;
-    this.element.style.top = `${scaledY}px`;
+    this.updateElementPosition();
     this.element.style.backgroundColor = memo.style.color;
     this.element.style.zIndex = String(memo.style.zIndex);
 
@@ -559,9 +627,11 @@ export class MemoComponent {
   destroy(): void {
     document.removeEventListener('mousemove', this.handleMouseMove);
     document.removeEventListener('mouseup', this.handleMouseUp);
+    this.cleanupContainerListeners();
     if (this.timestampUpdateInterval) {
       clearInterval(this.timestampUpdateInterval);
     }
+    this.container = null;
     this.element.remove();
   }
 }
