@@ -26,6 +26,7 @@ export class DrawingManager {
   private drawingContainers: Map<string, HTMLElement> = new Map();
   private sharedDrawingContainers: Map<string, HTMLElement> = new Map();
   private containerScrollListeners: Map<HTMLElement, () => void> = new Map();
+  private containerResizeObservers: Map<HTMLElement, ResizeObserver> = new Map();
   private windowScrollListener: ((event: Event) => void) | null = null;
   private isWindowScrollUpdateScheduled = false;
   private settings: Settings;
@@ -270,6 +271,16 @@ export class DrawingManager {
       container.addEventListener('scroll', handler, { passive: true });
       this.containerScrollListeners.set(container, handler);
     }
+
+    if (!this.containerResizeObservers.has(container) && typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => {
+        this.updateDrawingsForContainer(container);
+      });
+      observer.observe(container);
+      this.containerResizeObservers.set(container, observer);
+    }
+
+    this.updateDrawingsForContainer(container);
   }
 
   private unregisterContainerForDrawing(drawingId: string, isShared: boolean): void {
@@ -290,6 +301,12 @@ export class DrawingManager {
       if (listener) {
         container.removeEventListener('scroll', listener);
         this.containerScrollListeners.delete(container);
+      }
+
+      const observer = this.containerResizeObservers.get(container);
+      if (observer) {
+        observer.disconnect();
+        this.containerResizeObservers.delete(container);
       }
     }
   }
@@ -561,6 +578,9 @@ export class DrawingManager {
       container.removeEventListener('scroll', listener);
     });
     this.containerScrollListeners.clear();
+
+    this.containerResizeObservers.forEach(observer => observer.disconnect());
+    this.containerResizeObservers.clear();
 
     if (this.windowScrollListener) {
       window.removeEventListener('scroll', this.windowScrollListener);
@@ -1017,6 +1037,8 @@ export class DrawingManager {
         container.removeEventListener('scroll', listener);
       });
       this.containerScrollListeners.clear();
+      this.containerResizeObservers.forEach(observer => observer.disconnect());
+      this.containerResizeObservers.clear();
       this.sharedDrawingContainers.clear();
 
       await StorageManager.deleteAllDrawingsForUrl(this.currentUrl, this.settings);
