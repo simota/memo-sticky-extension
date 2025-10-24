@@ -26,6 +26,8 @@ export class DrawingManager {
   private drawingContainers: Map<string, HTMLElement> = new Map();
   private sharedDrawingContainers: Map<string, HTMLElement> = new Map();
   private containerScrollListeners: Map<HTMLElement, () => void> = new Map();
+  private windowScrollListener: ((event: Event) => void) | null = null;
+  private isWindowScrollUpdateScheduled = false;
   private settings: Settings;
   private currentUrl: string;
   private drawingMode: boolean = false;
@@ -492,6 +494,12 @@ export class DrawingManager {
     });
     this.containerScrollListeners.clear();
 
+    if (this.windowScrollListener) {
+      window.removeEventListener('scroll', this.windowScrollListener);
+      this.windowScrollListener = null;
+    }
+    this.isWindowScrollUpdateScheduled = false;
+
     if (this.svgCanvas) {
       this.svgCanvas.remove();
       this.svgCanvas = null;
@@ -535,12 +543,25 @@ export class DrawingManager {
     document.body.appendChild(this.svgCanvas);
 
     // スクロール時にサイズを更新
-    window.addEventListener('scroll', () => {
-      if (this.svgCanvas) {
-        this.svgCanvas.style.height = `${document.documentElement.scrollHeight}px`;
+    const scheduleCanvasUpdate = () => {
+      if (this.isWindowScrollUpdateScheduled) {
+        return;
       }
-      this.updateAllDrawingTransforms();
-    });
+      this.isWindowScrollUpdateScheduled = true;
+      requestAnimationFrame(() => {
+        this.isWindowScrollUpdateScheduled = false;
+        if (this.svgCanvas) {
+          this.svgCanvas.style.height = `${document.documentElement.scrollHeight}px`;
+        }
+        this.updateAllDrawingTransforms();
+      });
+    };
+
+    this.windowScrollListener = () => {
+      scheduleCanvasUpdate();
+    };
+
+    window.addEventListener('scroll', this.windowScrollListener, { passive: true });
   }
 
   /**
@@ -912,6 +933,12 @@ export class DrawingManager {
       this.drawings.forEach(component => component.destroy());
       this.drawings.clear();
       this.drawingContainers.clear();
+
+      if (this.windowScrollListener) {
+        window.removeEventListener('scroll', this.windowScrollListener);
+        this.windowScrollListener = null;
+      }
+      this.isWindowScrollUpdateScheduled = false;
 
       if (this.svgCanvas) {
         this.svgCanvas.remove();
