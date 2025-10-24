@@ -76,6 +76,32 @@ export class HighlightManager {
   }
 
   /**
+   * URL変更時にハイライトを再読み込み
+   */
+  private async handleUrlChange(newUrl: string): Promise<void> {
+    if (!newUrl || newUrl === this.currentUrl) {
+      return;
+    }
+
+    console.log(`HighlightManager: URL changed ${this.currentUrl} -> ${newUrl}`);
+
+    this.highlights.forEach(component => component.destroy());
+    this.highlights.clear();
+
+    this.currentUrl = newUrl;
+
+    if (!this.settings.enabled) {
+      return;
+    }
+
+    try {
+      await this.loadHighlights();
+    } catch (error) {
+      console.error('Failed to reload highlights after URL change:', error);
+    }
+  }
+
+  /**
    * 新しいハイライトを作成
    */
   createHighlight = (color: string): void => {
@@ -166,6 +192,17 @@ export class HighlightManager {
 
         case 'GET_HIGHLIGHTS_COUNT':
           sendResponse({ count: this.highlights.size });
+          break;
+
+        case 'SPA_URL_CHANGED':
+          if (typeof message.url === 'string') {
+            this.handleUrlChange(message.url).catch(error => {
+              console.error('Failed to handle SPA URL change in HighlightManager:', error);
+            });
+            sendResponse({ success: true });
+          } else {
+            sendResponse({ success: false, error: 'Invalid URL' });
+          }
           break;
 
         default:

@@ -320,10 +320,7 @@ export class HighlightComponent {
     this.elements.push(mark);
   }
 
-  /**
-   * ハイライトを削除
-   */
-  delete(): void {
+  private removeElements(): void {
     this.elements.forEach(el => {
       // <mark>の内容を親要素に戻す
       const parent = el.parentNode;
@@ -336,7 +333,21 @@ export class HighlightComponent {
     });
 
     this.elements = [];
+  }
+
+  /**
+   * ハイライトを削除
+   */
+  delete(): void {
+    this.removeElements();
     this.onDelete(this.highlight.id);
+  }
+
+  /**
+   * DOMからハイライトを除去（ストレージには影響しない）
+   */
+  destroy(): void {
+    this.removeElements();
   }
 
   /**

@@ -5,6 +5,65 @@
 import { StorageManager } from '../shared/storage';
 import { HIGHLIGHT_COLORS } from '../shared/types';
 
+const tabUrlCache = new Map<number, string>();
+
+const urlChangeFilter: chrome.webNavigation.WebNavigationEventFilter = {
+  url: [
+    {
+      schemes: ['http', 'https']
+    }
+  ]
+};
+
+function handleSpaNavigation(
+  details: chrome.webNavigation.WebNavigationTransitionCallbackDetails
+): void {
+  if (details.frameId !== 0) {
+    return;
+  }
+
+  const { tabId, url } = details;
+
+  if (typeof tabId !== 'number' || !url) {
+    return;
+  }
+
+  const previousUrl = tabUrlCache.get(tabId);
+  if (previousUrl === url) {
+    return;
+  }
+
+  tabUrlCache.set(tabId, url);
+
+  chrome.tabs
+    .sendMessage(tabId, {
+      type: 'SPA_URL_CHANGED',
+      url
+    })
+    .catch(error => {
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes('Receiving end does not exist')
+      ) {
+        console.error('Failed to notify content script about URL change:', error);
+      }
+    });
+}
+
+chrome.webNavigation.onHistoryStateUpdated.addListener(
+  handleSpaNavigation,
+  urlChangeFilter
+);
+
+chrome.webNavigation.onReferenceFragmentUpdated.addListener(
+  handleSpaNavigation,
+  urlChangeFilter
+);
+
+chrome.tabs.onRemoved.addListener(tabId => {
+  tabUrlCache.delete(tabId);
+});
+
 // 拡張機能インストール時の処理
 chrome.runtime.onInstalled.addListener(async (details) => {
   console.log('Extension installed/updated:', details.reason);

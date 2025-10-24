@@ -496,6 +496,18 @@ export class P2PSyncManager {
   }
 
   /**
+   * 現在のURLを更新
+   */
+  updateCurrentUrl(url: string): void {
+    if (this.currentUrl === url) {
+      return;
+    }
+
+    console.log(`🔄 Updating P2P current URL: ${this.currentUrl} -> ${url}`);
+    this.currentUrl = url;
+  }
+
+  /**
    * 接続中のピア一覧を取得
    */
   getConnectedPeers(): string[] {
