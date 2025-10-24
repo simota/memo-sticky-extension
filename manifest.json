@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "メモ付箋",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Webページに付箋メモを貼り付けられる拡張機能",
   "permissions": [
     "storage",

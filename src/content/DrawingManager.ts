@@ -518,32 +518,35 @@ export class DrawingManager {
         this.createSVGCanvas();
       }
 
-      drawings.forEach(drawing => {
-        // 既存の描画にviewportSizeがない場合は現在のビューポートサイズを設定
-        if (!drawing.viewportSize) {
-          drawing.viewportSize = {
-            width: window.innerWidth,
-            height: window.innerHeight
-          };
-          console.log('📐 Added viewportSize to existing drawing:', drawing.id);
-        }
-
-        const component = new DrawingComponent(drawing);
-        if (this.svgCanvas) {
-          const container = this.resolveContainerForDrawing(drawing);
-          const context = this.buildRenderContext(container);
-          const element = component.createSVGElement(this.svgCanvas, context);
-          if (element) {
-            this.svgCanvas.appendChild(element);
-            this.drawings.set(drawing.id, component);
-            if (container) {
-              this.registerContainerForDrawing(drawing.id, container, false);
-            }
-
-            // クリックで削除できるようにする
-            this.setupDrawingClickHandler(element, drawing.id);
+      // リロード時のスクロール位置復元を待つため、描画配置を遅延実行
+      requestAnimationFrame(() => {
+        drawings.forEach(drawing => {
+          // 既存の描画にviewportSizeがない場合は現在のビューポートサイズを設定
+          if (!drawing.viewportSize) {
+            drawing.viewportSize = {
+              width: window.innerWidth,
+              height: window.innerHeight
+            };
+            console.log('📐 Added viewportSize to existing drawing:', drawing.id);
           }
-        }
+
+          const component = new DrawingComponent(drawing);
+          if (this.svgCanvas) {
+            const container = this.resolveContainerForDrawing(drawing);
+            const context = this.buildRenderContext(container);
+            const element = component.createSVGElement(this.svgCanvas, context);
+            if (element) {
+              this.svgCanvas.appendChild(element);
+              this.drawings.set(drawing.id, component);
+              if (container) {
+                this.registerContainerForDrawing(drawing.id, container, false);
+              }
+
+              // クリックで削除できるようにする
+              this.setupDrawingClickHandler(element, drawing.id);
+            }
+          }
+        });
       });
 
       console.log(`Loaded ${drawings.length} drawings for ${this.currentUrl}`);
