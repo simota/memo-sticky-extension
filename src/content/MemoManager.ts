@@ -336,6 +336,48 @@ export class MemoManager {
   }
 
   /**
+   * URL変更に伴いメモを再読み込み
+   */
+  private async handleUrlChange(newUrl: string): Promise<void> {
+    if (!newUrl || newUrl === this.currentUrl) {
+      return;
+    }
+
+    console.log(`MemoManager: URL changed ${this.currentUrl} -> ${newUrl}`);
+
+    // 保留中の保存を強制実行
+    this.debouncedSaveMemo.flush();
+
+    // メモ作成モード中なら終了
+    if (this.createMode) {
+      this.exitCreateMode();
+    }
+
+    this.memos.forEach(component => component.destroy());
+    this.memos.clear();
+
+    this.sharedMemos.forEach(component => component.destroy());
+    this.sharedMemos.clear();
+
+    this.nextZIndex = Z_INDEX.MIN;
+    this.currentUrl = newUrl;
+
+    if (!this.settings.enabled) {
+      return;
+    }
+
+    try {
+      await this.loadMemos();
+    } catch (error) {
+      console.error('Failed to reload memos after URL change:', error);
+    }
+
+    if (this.p2pSyncManager) {
+      this.p2pSyncManager.updateCurrentUrl(newUrl);
+    }
+  }
+
+  /**
    * メモコンポーネントを作成
    */
   private createMemoComponent(memo: Memo): void {
@@ -672,6 +714,17 @@ export class MemoManager {
 
         case 'GET_MEMOS_COUNT':
           sendResponse({ count: this.memos.size });
+          break;
+
+        case 'SPA_URL_CHANGED':
+          if (typeof message.url === 'string') {
+            this.handleUrlChange(message.url).catch(error => {
+              console.error('Failed to handle SPA URL change in MemoManager:', error);
+            });
+            sendResponse({ success: true });
+          } else {
+            sendResponse({ success: false, error: 'Invalid URL' });
+          }
           break;
 
         default:

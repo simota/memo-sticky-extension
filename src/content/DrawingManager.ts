@@ -186,6 +186,52 @@ export class DrawingManager {
   }
 
   /**
+   * URL変更時の再初期化
+   */
+  private async handleUrlChange(newUrl: string): Promise<void> {
+    if (!newUrl || newUrl === this.currentUrl) {
+      return;
+    }
+
+    console.log(`DrawingManager: URL changed ${this.currentUrl} -> ${newUrl}`);
+
+    if (this.drawingMode) {
+      this.toggleDrawingMode();
+    }
+
+    this.isDrawing = false;
+    this.currentPath = null;
+    this.currentPathData = '';
+
+    this.drawings.forEach(component => component.destroy());
+    this.drawings.clear();
+
+    this.sharedDrawings.forEach(component => component.destroy());
+    this.sharedDrawings.clear();
+
+    if (this.svgCanvas) {
+      this.svgCanvas.remove();
+      this.svgCanvas = null;
+    }
+
+    this.currentUrl = newUrl;
+
+    if (!this.settings.enabled) {
+      return;
+    }
+
+    try {
+      await this.loadDrawings();
+    } catch (error) {
+      console.error('Failed to reload drawings after URL change:', error);
+    }
+
+    if (this.p2pSyncManager) {
+      this.p2pSyncManager.updateCurrentUrl(newUrl);
+    }
+  }
+
+  /**
    * SVGキャンバスを作成
    */
   private createSVGCanvas(): void {
@@ -635,6 +681,17 @@ export class DrawingManager {
         case 'DELETE_ALL_DRAWINGS':
           this.deleteAllDrawings();
           sendResponse({ success: true });
+          break;
+
+        case 'SPA_URL_CHANGED':
+          if (typeof message.url === 'string') {
+            this.handleUrlChange(message.url).catch(error => {
+              console.error('Failed to handle SPA URL change in DrawingManager:', error);
+            });
+            sendResponse({ success: true });
+          } else {
+            sendResponse({ success: false, error: 'Invalid URL' });
+          }
           break;
 
         default:
