@@ -166,22 +166,17 @@ export class DrawingManager {
   }
 
   private resolveContainerForDrawing(drawing: Drawing, isShared: boolean = false): HTMLElement | null {
-    if (!drawing.containerSelector) {
-      return null;
+    const container = this.findContainerElement(drawing.containerSelector);
+    if (container) {
+      return container;
     }
 
-    try {
-      const container = document.querySelector<HTMLElement>(drawing.containerSelector);
-      if (container) {
-        return container;
-      }
+    if (drawing.containerSelector) {
       console.warn(
         'Failed to resolve container for drawing:',
         drawing.id,
         drawing.containerSelector
       );
-    } catch (error) {
-      console.warn('Failed to query container for drawing:', drawing.id, error);
     }
 
     if (drawing.pagePathData) {
@@ -190,6 +185,58 @@ export class DrawingManager {
     if (!isShared) {
       delete drawing.containerSelector;
     }
+    return null;
+  }
+
+  private findContainerElement(selector?: string): HTMLElement | null {
+    if (!selector) {
+      return null;
+    }
+
+    try {
+      return document.querySelector<HTMLElement>(selector) ?? null;
+    } catch (error) {
+      console.warn('Failed to query container selector:', selector, error);
+      return null;
+    }
+  }
+
+  private ensureContainerForDrawing(
+    drawingId: string,
+    component: DrawingComponent,
+    isShared: boolean
+  ): HTMLElement | null {
+    const map = isShared ? this.sharedDrawingContainers : this.drawingContainers;
+    const current = map.get(drawingId) ?? null;
+
+    if (current && current.isConnected) {
+      return current;
+    }
+
+    if (current && !current.isConnected) {
+      this.unregisterContainerForDrawing(drawingId, isShared);
+    }
+
+    const drawing = component.getDrawing();
+    const resolved = this.findContainerElement(drawing.containerSelector);
+    if (resolved) {
+      this.registerContainerForDrawing(drawingId, resolved, isShared);
+      return resolved;
+    }
+
+    if (!isShared && drawing.containerSelector && drawing.pagePathData) {
+      drawing.pathData = drawing.pagePathData;
+      delete drawing.containerSelector;
+
+      if (this.svgCanvas) {
+        const context = this.buildRenderContext(null);
+        const newElement = component.recreate(this.svgCanvas, context);
+        if (newElement && drawing.id) {
+          this.setupDrawingClickHandler(newElement, drawing.id);
+        }
+      }
+    }
+
     return null;
   }
 
@@ -263,14 +310,20 @@ export class DrawingManager {
   private updateDrawingsForContainer(container: HTMLElement): void {
     this.drawings.forEach((component, drawingId) => {
       if (this.drawingContainers.get(drawingId) === container) {
-        const context = this.buildRenderContext(container);
+        const activeContainer = container.isConnected
+          ? container
+          : this.ensureContainerForDrawing(drawingId, component, false);
+        const context = this.buildRenderContext(activeContainer);
         component.updateTransform(context);
       }
     });
 
     this.sharedDrawings.forEach((component, drawingId) => {
       if (this.sharedDrawingContainers.get(drawingId) === container) {
-        const context = this.buildRenderContext(container);
+        const activeContainer = container.isConnected
+          ? container
+          : this.ensureContainerForDrawing(drawingId, component, true);
+        const context = this.buildRenderContext(activeContainer);
         component.updateTransform(context);
       }
     });
@@ -278,13 +331,13 @@ export class DrawingManager {
 
   private updateAllDrawingTransforms(): void {
     this.drawings.forEach((component, drawingId) => {
-      const container = this.drawingContainers.get(drawingId) ?? null;
+      const container = this.ensureContainerForDrawing(drawingId, component, false);
       const context = this.buildRenderContext(container);
       component.updateTransform(context);
     });
 
     this.sharedDrawings.forEach((component, drawingId) => {
-      const container = this.sharedDrawingContainers.get(drawingId) ?? null;
+      const container = this.ensureContainerForDrawing(drawingId, component, true);
       const context = this.buildRenderContext(container);
       component.updateTransform(context);
     });
@@ -987,7 +1040,7 @@ export class DrawingManager {
           hasViewportSize: !!drawing.viewportSize,
           viewportSize: drawing.viewportSize
         });
-        const container = this.drawingContainers.get(drawingId) ?? null;
+        const container = this.ensureContainerForDrawing(drawingId, component, false);
         const context = this.buildRenderContext(container);
         const newElement = component.recreate(this.svgCanvas!, context);
         if (newElement && drawing.id) {
@@ -1003,7 +1056,7 @@ export class DrawingManager {
           hasViewportSize: !!drawing.viewportSize,
           viewportSize: drawing.viewportSize
         });
-        const container = this.sharedDrawingContainers.get(drawingId) ?? null;
+        const container = this.ensureContainerForDrawing(drawingId, component, true);
         const context = this.buildRenderContext(container);
         const newElement = component.recreate(this.svgCanvas!, context);
         if (newElement) {
