@@ -4,11 +4,19 @@
 
 import { Memo, Settings, DEFAULT_STYLE, SharedMemo } from '../shared/types';
 import { StorageManager } from '../shared/storage';
-import { generateId, getCurrentTimestamp, debounce } from '../shared/utils';
+import { generateId, getCurrentTimestamp, debounce, generateSelector } from '../shared/utils';
 import { CSS_CLASSES, Z_INDEX, DEBOUNCE_TIME } from '../shared/constants';
 import { MemoComponent } from './MemoComponent';
 import { P2PSyncManager } from '../shared/p2p-sync-manager';
 import { UserManager } from '../shared/user-manager';
+
+type MemoCreationPoint = {
+  pageX: number;
+  pageY: number;
+  clientX: number;
+  clientY: number;
+  target?: HTMLElement | null;
+};
 
 export class MemoManager {
   private memos: Map<string, MemoComponent> = new Map();
@@ -18,7 +26,7 @@ export class MemoManager {
   private nextZIndex: number = Z_INDEX.MIN;
   private createModeClickHandler: ((e: MouseEvent) => void) | null = null;
   private createModeCancelHandler: ((e: KeyboardEvent) => void) | null = null;
-  private lastContextMenuPosition: { x: number; y: number } | null = null;
+  private lastContextMenuData: MemoCreationPoint | null = null;
   // P2P共有用
   private p2pSyncManager: P2PSyncManager | null = null;
   private sharedMemos: Map<string, MemoComponent> = new Map(); // 他ユーザーのメモ
@@ -244,10 +252,12 @@ export class MemoManager {
 
     // 閲覧専用のメモコンポーネントを作成
     // TODO: 後でSharedMemoComponentに置き換え
+    const container = this.resolveContainer(memo);
     const component = new MemoComponent(
       memo,
       () => {}, // 編集不可
-      () => {}  // 削除不可
+      () => {}, // 削除不可
+      container || undefined
     );
 
     // 視覚的に区別するためのスタイル追加
@@ -380,47 +390,44 @@ export class MemoManager {
   /**
    * メモコンポーネントを作成
    */
-  private createMemoComponent(memo: Memo): void {
+  private createMemoComponent(memo: Memo, container?: HTMLElement | null): MemoComponent {
+    const targetContainer = container ?? this.resolveContainer(memo);
     const component = new MemoComponent(
       memo,
       this.debouncedSaveMemo,
-      this.deleteMemo
+      this.deleteMemo,
+      targetContainer || undefined
     );
 
     this.memos.set(memo.id, component);
     document.body.appendChild(component.getElement());
+    return component;
+  }
+
+  private resolveContainer(memo: Memo): HTMLElement | null {
+    if (!memo.containerSelector) {
+      return null;
+    }
+
+    try {
+      const element = document.querySelector<HTMLElement>(memo.containerSelector);
+      if (!element || element === document.body || element === document.documentElement) {
+        return null;
+      }
+      return element;
+    } catch (error) {
+      console.warn('Failed to resolve container for memo:', memo.id, error);
+      return null;
+    }
   }
 
   /**
    * 新しいメモを作成
    */
-  createMemo = (x: number, y: number): void => {
-    const memo: Memo = {
-      id: generateId(),
-      url: this.currentUrl,
-      content: '',
-      position: {
-        x,
-        y,
-        type: 'fixed'
-      },
-      style: {
-        ...DEFAULT_STYLE,
-        color: this.settings.defaultColor || DEFAULT_STYLE.color,
-        width: this.settings.defaultSize?.width || DEFAULT_STYLE.width,
-        height: this.settings.defaultSize?.height || DEFAULT_STYLE.height,
-        fontSize: this.settings.defaultFontSize || DEFAULT_STYLE.fontSize,
-        zIndex: this.nextZIndex++
-      },
-      viewportSize: {
-        width: window.innerWidth,
-        height: window.innerHeight
-      },
-      createdAt: getCurrentTimestamp(),
-      updatedAt: getCurrentTimestamp()
-    };
+  createMemo = (point: MemoCreationPoint): void => {
+    const { memo, container } = this.buildMemoFromPoint(point, '');
 
-    this.createMemoComponent(memo);
+    this.createMemoComponent(memo, container);
     this.saveMemo(memo);
 
     // 作成後、すぐにフォーカス
@@ -436,16 +443,56 @@ export class MemoManager {
   /**
    * テキスト付きで新しいメモを作成
    */
-  private createMemoWithText = (x: number, y: number, text: string): void => {
+  private createMemoWithText = (point: MemoCreationPoint, text: string): void => {
+    const { memo, container } = this.buildMemoFromPoint(point, text);
+
+    this.createMemoComponent(memo, container);
+    this.saveMemo(memo);
+  };
+
+  private buildMemoFromPoint(
+    point: MemoCreationPoint,
+    content: string
+  ): { memo: Memo; container: HTMLElement | null } {
+    const target = point.target instanceof HTMLElement ? point.target : null;
+    const elementAtPoint = document.elementFromPoint(point.clientX, point.clientY) as
+      | HTMLElement
+      | null;
+
+    const container = this.findScrollableContainer(target ?? elementAtPoint);
+    let positionX = point.pageX;
+    let positionY = point.pageY;
+    let containerSelector: string | undefined;
+    let viewportSize = {
+      width: window.innerWidth,
+      height: window.innerHeight
+    };
+
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      const pageLeft = window.scrollX + rect.left;
+      const pageTop = window.scrollY + rect.top;
+
+      positionX = container.scrollLeft + (point.pageX - pageLeft);
+      positionY = container.scrollTop + (point.pageY - pageTop);
+      containerSelector = generateSelector(container);
+      viewportSize = {
+        width: container.clientWidth,
+        height: container.clientHeight
+      };
+    }
+
     const memo: Memo = {
       id: generateId(),
       url: this.currentUrl,
-      content: text,
+      content,
       position: {
-        x,
-        y,
+        x: positionX,
+        y: positionY,
         type: 'fixed'
       },
+      containerSelector,
+      pagePosition: { x: point.pageX, y: point.pageY },
       style: {
         ...DEFAULT_STYLE,
         color: this.settings.defaultColor || DEFAULT_STYLE.color,
@@ -454,17 +501,41 @@ export class MemoManager {
         fontSize: this.settings.defaultFontSize || DEFAULT_STYLE.fontSize,
         zIndex: this.nextZIndex++
       },
-      viewportSize: {
-        width: window.innerWidth,
-        height: window.innerHeight
-      },
+      viewportSize,
       createdAt: getCurrentTimestamp(),
       updatedAt: getCurrentTimestamp()
     };
 
-    this.createMemoComponent(memo);
-    this.saveMemo(memo);
-  };
+    return { memo, container };
+  }
+
+  private findScrollableContainer(element: HTMLElement | null): HTMLElement | null {
+    let current = element;
+
+    while (current && current !== document.body && current !== document.documentElement) {
+      if (this.isScrollableContainer(current)) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+
+    return null;
+  }
+
+  private isScrollableContainer(element: HTMLElement): boolean {
+    const style = window.getComputedStyle(element);
+    const overflowValues = [style.overflow, style.overflowY, style.overflowX];
+    const scrollable = overflowValues.some(value => ['auto', 'scroll', 'overlay'].includes(value));
+
+    if (!scrollable) {
+      return false;
+    }
+
+    return (
+      element.scrollHeight > element.clientHeight + 1 ||
+      element.scrollWidth > element.clientWidth + 1
+    );
+  }
 
   /**
    * メモを保存（デバウンス付き）
@@ -567,7 +638,13 @@ export class MemoManager {
         e.preventDefault();
         e.stopPropagation();
 
-        this.createMemo(e.pageX, e.pageY);
+        this.createMemo({
+          pageX: e.pageX,
+          pageY: e.pageY,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          target: e.target instanceof HTMLElement ? e.target : null
+        });
         this.exitCreateMode();
       };
 
@@ -631,9 +708,12 @@ export class MemoManager {
    */
   private setupContextMenuListener(): void {
     document.addEventListener('contextmenu', (e: MouseEvent) => {
-      this.lastContextMenuPosition = {
-        x: e.pageX,
-        y: e.pageY
+      this.lastContextMenuData = {
+        pageX: e.pageX,
+        pageY: e.pageY,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        target: e.target instanceof HTMLElement ? e.target : null
       };
     });
   }
@@ -687,22 +767,18 @@ export class MemoManager {
 
         case 'CREATE_MEMO_AT_CONTEXT_POSITION':
           // 右クリック位置にメモを作成
-          if (this.lastContextMenuPosition) {
-            this.createMemo(this.lastContextMenuPosition.x, this.lastContextMenuPosition.y);
-            this.lastContextMenuPosition = null;
+          if (this.lastContextMenuData) {
+            this.createMemo(this.lastContextMenuData);
+            this.lastContextMenuData = null;
           }
           sendResponse({ success: true });
           break;
 
         case 'CREATE_MEMO_WITH_TEXT':
           // 選択テキスト付きでメモを作成
-          if (this.lastContextMenuPosition) {
-            this.createMemoWithText(
-              this.lastContextMenuPosition.x,
-              this.lastContextMenuPosition.y,
-              message.text || ''
-            );
-            this.lastContextMenuPosition = null;
+          if (this.lastContextMenuData) {
+            this.createMemoWithText(this.lastContextMenuData, message.text || '');
+            this.lastContextMenuData = null;
           }
           sendResponse({ success: true });
           break;
