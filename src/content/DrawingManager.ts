@@ -4,14 +4,31 @@
 
 import { Drawing, Settings, DRAWING_COLORS, SharedDrawing } from '../shared/types';
 import { StorageManager } from '../shared/storage';
-import { generateId, getCurrentTimestamp } from '../shared/utils';
+import { generateId, getCurrentTimestamp, generateSelector } from '../shared/utils';
 import { CSS_CLASSES, Z_INDEX } from '../shared/constants';
-import { DrawingComponent } from './DrawingComponent';
+import { DrawingComponent, DrawingRenderContext } from './DrawingComponent';
 import { P2PSyncManager } from '../shared/p2p-sync-manager';
+
+interface DrawingContext {
+  container: HTMLElement | null;
+  containerSelector?: string;
+  pageLeft: number;
+  pageTop: number;
+  scrollLeft: number;
+  scrollTop: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
 
 export class DrawingManager {
   private drawings: Map<string, DrawingComponent> = new Map();
   private sharedDrawings: Map<string, DrawingComponent> = new Map(); // 他ユーザーの描画
+  private drawingContainers: Map<string, HTMLElement> = new Map();
+  private sharedDrawingContainers: Map<string, HTMLElement> = new Map();
+  private containerScrollListeners: Map<HTMLElement, () => void> = new Map();
+  private containerResizeObservers: Map<HTMLElement, ResizeObserver> = new Map();
+  private windowScrollListener: ((event: Event) => void) | null = null;
+  private isWindowScrollUpdateScheduled = false;
   private settings: Settings;
   private currentUrl: string;
   private drawingMode: boolean = false;
@@ -23,6 +40,7 @@ export class DrawingManager {
   private currentColor: string = '#FF0000';
   private currentStrokeWidth: number = 3;
   private p2pSyncManager: P2PSyncManager | null = null;
+  private currentDrawingContext: DrawingContext | null = null;
 
   constructor(p2pSyncManager: P2PSyncManager | null = null) {
     this.currentUrl = window.location.href;
@@ -46,6 +64,7 @@ export class DrawingManager {
       this.setupMessageListener();
       this.setupP2PListeners();
       this.setupResizeListener();
+      this.setupScrollRestoreListener();
 
       console.log('DrawingManager initialized');
     } catch (error) {
@@ -115,7 +134,9 @@ export class DrawingManager {
 
     if (this.svgCanvas) {
       const component = new DrawingComponent(drawing);
-      const element = component.createSVGElement(this.svgCanvas);
+      const container = this.resolveContainerForDrawing(drawing);
+      const context = this.buildRenderContext(container);
+      const element = component.createSVGElement(this.svgCanvas, context);
       if (element) {
         // 共有描画として視覚的に区別
         element.style.opacity = '0.7';
@@ -124,6 +145,9 @@ export class DrawingManager {
 
         this.svgCanvas.appendChild(element);
         this.sharedDrawings.set(drawing.id, component);
+        if (container) {
+          this.registerContainerForDrawing(drawing.id, container, true);
+        }
 
         console.log('✅ Shared drawing created:', drawing.id, 'by', drawing.ownerId);
       }
@@ -137,14 +161,352 @@ export class DrawingManager {
     const component = this.sharedDrawings.get(drawingId);
     if (component) {
       component.destroy();
+      this.unregisterContainerForDrawing(drawingId, true);
       this.sharedDrawings.delete(drawingId);
       console.log('Removed shared drawing:', drawingId);
     }
   }
 
-  /**
-   * 保存されている描画を読み込み
-   */
+  private resolveContainerForDrawing(drawing: Drawing): HTMLElement | null {
+    const container = this.findContainerElement(drawing.containerSelector);
+    if (container) {
+      return container;
+    }
+
+    if (drawing.containerSelector) {
+      console.warn(
+        'Failed to resolve container for drawing:',
+        drawing.id,
+        drawing.containerSelector
+      );
+    }
+    return null;
+  }
+
+  private findContainerElement(selector?: string): HTMLElement | null {
+    if (!selector) {
+      return null;
+    }
+
+    try {
+      return document.querySelector<HTMLElement>(selector) ?? null;
+    } catch (error) {
+      console.warn('Failed to query container selector:', selector, error);
+      return null;
+    }
+  }
+
+  private ensureContainerForDrawing(
+    drawingId: string,
+    component: DrawingComponent,
+    isShared: boolean
+  ): HTMLElement | null {
+    const map = isShared ? this.sharedDrawingContainers : this.drawingContainers;
+    const current = map.get(drawingId) ?? null;
+
+    if (current && current.isConnected) {
+      return current;
+    }
+
+    if (current && !current.isConnected) {
+      this.unregisterContainerForDrawing(drawingId, isShared);
+    }
+
+    const drawing = component.getDrawing();
+    const resolved = this.findContainerElement(drawing.containerSelector);
+    if (resolved) {
+      this.registerContainerForDrawing(drawingId, resolved, isShared);
+      if (!component.isRenderedWithinContainer()) {
+        this.recreateDrawingElement(component, resolved, drawingId, isShared);
+      }
+      return resolved;
+    }
+
+    if (component.isRenderedWithinContainer()) {
+      this.recreateDrawingElement(component, null, drawingId, isShared);
+    }
+
+    return null;
+  }
+
+  private buildRenderContext(container: HTMLElement | null): DrawingRenderContext {
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      return {
+        hasContainer: true,
+        pageLeft: window.scrollX + rect.left,
+        pageTop: window.scrollY + rect.top,
+        scrollLeft: container.scrollLeft,
+        scrollTop: container.scrollTop,
+        viewportWidth: container.clientWidth,
+        viewportHeight: container.clientHeight
+      };
+    }
+
+    return {
+      hasContainer: false,
+      pageLeft: 0,
+      pageTop: 0,
+      scrollLeft: window.scrollX,
+      scrollTop: window.scrollY,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  }
+
+  private registerContainerForDrawing(
+    drawingId: string,
+    container: HTMLElement,
+    isShared: boolean
+  ): void {
+    if (isShared) {
+      this.sharedDrawingContainers.set(drawingId, container);
+    } else {
+      this.drawingContainers.set(drawingId, container);
+    }
+
+    if (!this.containerScrollListeners.has(container)) {
+      const handler = () => {
+        this.updateDrawingsForContainer(container);
+      };
+      container.addEventListener('scroll', handler, { passive: true });
+      this.containerScrollListeners.set(container, handler);
+    }
+
+    if (!this.containerResizeObservers.has(container) && typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => {
+        this.updateDrawingsForContainer(container);
+      });
+      observer.observe(container);
+      this.containerResizeObservers.set(container, observer);
+    }
+
+    // リロード時のスクロール位置復元を待つため、描画更新を遅延実行
+    requestAnimationFrame(() => {
+      this.updateDrawingsForContainer(container);
+    });
+  }
+
+  private unregisterContainerForDrawing(drawingId: string, isShared: boolean): void {
+    const map = isShared ? this.sharedDrawingContainers : this.drawingContainers;
+    const container = map.get(drawingId);
+    if (!container) {
+      return;
+    }
+
+    map.delete(drawingId);
+
+    const stillUsed =
+      Array.from(this.drawingContainers.values()).includes(container) ||
+      Array.from(this.sharedDrawingContainers.values()).includes(container);
+
+    if (!stillUsed) {
+      const listener = this.containerScrollListeners.get(container);
+      if (listener) {
+        container.removeEventListener('scroll', listener);
+        this.containerScrollListeners.delete(container);
+      }
+
+      const observer = this.containerResizeObservers.get(container);
+      if (observer) {
+        observer.disconnect();
+        this.containerResizeObservers.delete(container);
+      }
+    }
+  }
+
+  private recreateDrawingElement(
+    component: DrawingComponent,
+    container: HTMLElement | null,
+    drawingId: string,
+    isShared: boolean
+  ): void {
+    if (!this.svgCanvas) {
+      return;
+    }
+
+    const context = this.buildRenderContext(container);
+    const newElement = component.recreate(this.svgCanvas, context);
+    if (!newElement) {
+      return;
+    }
+
+    if (isShared) {
+      newElement.style.opacity = '0.7';
+      newElement.setAttribute('data-shared', 'true');
+      const drawing = component.getDrawing() as SharedDrawing;
+      if ('ownerId' in drawing) {
+        newElement.setAttribute('data-owner', drawing.ownerId);
+      }
+    } else {
+      this.setupDrawingClickHandler(newElement, drawingId);
+    }
+  }
+
+  private updateDrawingsForContainer(container: HTMLElement): void {
+    this.drawings.forEach((component, drawingId) => {
+      if (this.drawingContainers.get(drawingId) === container) {
+        const activeContainer = container.isConnected
+          ? container
+          : this.ensureContainerForDrawing(drawingId, component, false);
+        const context = this.buildRenderContext(activeContainer);
+        component.updateTransform(context);
+      }
+    });
+
+    this.sharedDrawings.forEach((component, drawingId) => {
+      if (this.sharedDrawingContainers.get(drawingId) === container) {
+        const activeContainer = container.isConnected
+          ? container
+          : this.ensureContainerForDrawing(drawingId, component, true);
+        const context = this.buildRenderContext(activeContainer);
+        component.updateTransform(context);
+      }
+    });
+  }
+
+  private updateAllDrawingTransforms(): void {
+    this.drawings.forEach((component, drawingId) => {
+      const container = this.ensureContainerForDrawing(drawingId, component, false);
+      const context = this.buildRenderContext(container);
+      component.updateTransform(context);
+    });
+
+    this.sharedDrawings.forEach((component, drawingId) => {
+      const container = this.ensureContainerForDrawing(drawingId, component, true);
+      const context = this.buildRenderContext(container);
+      component.updateTransform(context);
+    });
+  }
+
+  private getDefaultDrawingContext(): DrawingContext {
+    return {
+      container: null,
+      containerSelector: undefined,
+      pageLeft: 0,
+      pageTop: 0,
+      scrollLeft: window.scrollX,
+      scrollTop: window.scrollY,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  }
+
+  private resolveDrawingContext(event: PointerEvent): DrawingContext {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const elementAtPoint = this.getUnderlyingElement(event.clientX, event.clientY, target);
+    const container = this.findScrollableContainer(elementAtPoint ?? target);
+
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      return {
+        container,
+        containerSelector: generateSelector(container),
+        pageLeft: window.scrollX + rect.left,
+        pageTop: window.scrollY + rect.top,
+        scrollLeft: container.scrollLeft,
+        scrollTop: container.scrollTop,
+        viewportWidth: container.clientWidth,
+        viewportHeight: container.clientHeight
+      };
+    }
+
+    return {
+      container: null,
+      containerSelector: undefined,
+      pageLeft: 0,
+      pageTop: 0,
+      scrollLeft: window.scrollX,
+      scrollTop: window.scrollY,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  }
+
+  private getUnderlyingElement(
+    clientX: number,
+    clientY: number,
+    fallback: HTMLElement | null
+  ): HTMLElement | null {
+    const elements = document.elementsFromPoint(clientX, clientY);
+    for (const el of elements) {
+      if (el === this.svgCanvas || (this.toolbar && this.toolbar.contains(el))) {
+        continue;
+      }
+      if (el instanceof HTMLElement) {
+        return el;
+      }
+    }
+    return fallback;
+  }
+
+  private findScrollableContainer(element: HTMLElement | null): HTMLElement | null {
+    let current = element;
+
+    while (current && current !== document.body && current !== document.documentElement) {
+      if (this.isScrollableContainer(current)) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+
+    return null;
+  }
+
+  private isScrollableContainer(element: HTMLElement): boolean {
+    const style = window.getComputedStyle(element);
+    const overflowValues = [style.overflow, style.overflowY, style.overflowX];
+    const scrollable = overflowValues.some(value => ['auto', 'scroll', 'overlay'].includes(value));
+
+    if (!scrollable) {
+      return false;
+    }
+
+    return (
+      element.scrollHeight > element.clientHeight + 1 ||
+      element.scrollWidth > element.clientWidth + 1
+    );
+  }
+
+  private convertPagePathToAnchor(pathData: string, context: DrawingContext): string {
+    if (!context.container) {
+      return pathData;
+    }
+
+    return pathData.replace(/([ML])\s*([-\d.]+)\s+([-\d.]+)/g, (_match, command, x, y) => {
+      const anchorPoint = this.convertPagePointToAnchor(parseFloat(x), parseFloat(y), context);
+      return `${command} ${anchorPoint.x} ${anchorPoint.y}`;
+    });
+  }
+
+  private convertPagePointToAnchor(
+    pageX: number,
+    pageY: number,
+    context: DrawingContext
+  ): { x: number; y: number } {
+    return {
+      x: this.convertPageXToAnchor(pageX, context),
+      y: this.convertPageYToAnchor(pageY, context)
+    };
+  }
+
+  private convertPageXToAnchor(pageX: number, context: DrawingContext): number {
+    if (!context.container) {
+      return pageX;
+    }
+    return context.scrollLeft + (pageX - context.pageLeft);
+  }
+
+  private convertPageYToAnchor(pageY: number, context: DrawingContext): number {
+    if (!context.container) {
+      return pageY;
+    }
+    return context.scrollTop + (pageY - context.pageTop);
+  }
+
+/**
+ * 保存されている描画を読み込み
+ */
   private async loadDrawings(): Promise<void> {
     try {
       const drawings = await StorageManager.getDrawingsForUrl(
@@ -156,27 +518,35 @@ export class DrawingManager {
         this.createSVGCanvas();
       }
 
-      drawings.forEach(drawing => {
-        // 既存の描画にviewportSizeがない場合は現在のビューポートサイズを設定
-        if (!drawing.viewportSize) {
-          drawing.viewportSize = {
-            width: window.innerWidth,
-            height: window.innerHeight
-          };
-          console.log('📐 Added viewportSize to existing drawing:', drawing.id);
-        }
-
-        const component = new DrawingComponent(drawing);
-        if (this.svgCanvas) {
-          const element = component.createSVGElement(this.svgCanvas);
-          if (element) {
-            this.svgCanvas.appendChild(element);
-            this.drawings.set(drawing.id, component);
-
-            // クリックで削除できるようにする
-            this.setupDrawingClickHandler(element, drawing.id);
+      // リロード時のスクロール位置復元を待つため、描画配置を遅延実行
+      requestAnimationFrame(() => {
+        drawings.forEach(drawing => {
+          // 既存の描画にviewportSizeがない場合は現在のビューポートサイズを設定
+          if (!drawing.viewportSize) {
+            drawing.viewportSize = {
+              width: window.innerWidth,
+              height: window.innerHeight
+            };
+            console.log('📐 Added viewportSize to existing drawing:', drawing.id);
           }
-        }
+
+          const component = new DrawingComponent(drawing);
+          if (this.svgCanvas) {
+            const container = this.resolveContainerForDrawing(drawing);
+            const context = this.buildRenderContext(container);
+            const element = component.createSVGElement(this.svgCanvas, context);
+            if (element) {
+              this.svgCanvas.appendChild(element);
+              this.drawings.set(drawing.id, component);
+              if (container) {
+                this.registerContainerForDrawing(drawing.id, container, false);
+              }
+
+              // クリックで削除できるようにする
+              this.setupDrawingClickHandler(element, drawing.id);
+            }
+          }
+        });
       });
 
       console.log(`Loaded ${drawings.length} drawings for ${this.currentUrl}`);
@@ -208,6 +578,22 @@ export class DrawingManager {
 
     this.sharedDrawings.forEach(component => component.destroy());
     this.sharedDrawings.clear();
+    this.drawingContainers.clear();
+    this.sharedDrawingContainers.clear();
+
+    this.containerScrollListeners.forEach((listener, container) => {
+      container.removeEventListener('scroll', listener);
+    });
+    this.containerScrollListeners.clear();
+
+    this.containerResizeObservers.forEach(observer => observer.disconnect());
+    this.containerResizeObservers.clear();
+
+    if (this.windowScrollListener) {
+      window.removeEventListener('scroll', this.windowScrollListener);
+      this.windowScrollListener = null;
+    }
+    this.isWindowScrollUpdateScheduled = false;
 
     if (this.svgCanvas) {
       this.svgCanvas.remove();
@@ -252,11 +638,25 @@ export class DrawingManager {
     document.body.appendChild(this.svgCanvas);
 
     // スクロール時にサイズを更新
-    window.addEventListener('scroll', () => {
-      if (this.svgCanvas) {
-        this.svgCanvas.style.height = `${document.documentElement.scrollHeight}px`;
+    const scheduleCanvasUpdate = () => {
+      if (this.isWindowScrollUpdateScheduled) {
+        return;
       }
-    });
+      this.isWindowScrollUpdateScheduled = true;
+      requestAnimationFrame(() => {
+        this.isWindowScrollUpdateScheduled = false;
+        if (this.svgCanvas) {
+          this.svgCanvas.style.height = `${document.documentElement.scrollHeight}px`;
+        }
+        this.updateAllDrawingTransforms();
+      });
+    };
+
+    this.windowScrollListener = () => {
+      scheduleCanvasUpdate();
+    };
+
+    window.addEventListener('scroll', this.windowScrollListener, { passive: true });
   }
 
   /**
@@ -447,6 +847,7 @@ export class DrawingManager {
     if (!this.svgCanvas) return;
 
     this.isDrawing = true;
+    this.currentDrawingContext = this.resolveDrawingContext(e);
     const point = this.getPoint(e);
 
     // 新しいパスを開始
@@ -481,35 +882,66 @@ export class DrawingManager {
 
     this.isDrawing = false;
 
-    // 描画を保存
+    const context = this.currentDrawingContext ?? this.getDefaultDrawingContext();
+
+    let storedPathData = this.currentPathData;
+    let pagePathData: string | undefined;
+
+    if (context.container) {
+      storedPathData = this.convertPagePathToAnchor(this.currentPathData, context);
+      pagePathData = this.currentPathData;
+    }
+
     const drawing: Drawing = {
       id: generateId(),
       url: this.currentUrl,
       type: 'pen',
-      pathData: this.currentPathData,
+      pathData: storedPathData,
       color: this.currentColor,
       strokeWidth: this.currentStrokeWidth,
-      scrollOffset: { x: window.scrollX, y: window.scrollY },
+      scrollOffset: context.container
+        ? { x: context.scrollLeft, y: context.scrollTop }
+        : { x: window.scrollX, y: window.scrollY },
+      containerSelector: context.containerSelector,
+      pagePathData,
       viewportSize: {
-        width: window.innerWidth,
-        height: window.innerHeight
+        width: context.container ? context.viewportWidth : window.innerWidth,
+        height: context.container ? context.viewportHeight : window.innerHeight
       },
       createdAt: getCurrentTimestamp(),
       updatedAt: getCurrentTimestamp()
     };
 
-    const component = new DrawingComponent(drawing);
-    this.currentPath.dataset.drawingId = drawing.id;
-    component['element'] = this.currentPath;
-    this.drawings.set(drawing.id, component);
+    if (this.currentPath.parentNode) {
+      this.currentPath.parentNode.removeChild(this.currentPath);
+    }
 
-    // クリックで削除できるようにする
-    this.setupDrawingClickHandler(this.currentPath, drawing.id);
+    if (!this.svgCanvas) {
+      this.createSVGCanvas();
+    }
+
+    const svg = this.svgCanvas;
+    const component = new DrawingComponent(drawing);
+    if (svg) {
+      const container = context.container ?? null;
+      const renderContext = this.buildRenderContext(container);
+      const element = component.createSVGElement(svg, renderContext);
+      if (element) {
+        svg.appendChild(element);
+        this.setupDrawingClickHandler(element, drawing.id);
+      }
+    }
+
+    this.drawings.set(drawing.id, component);
+    if (context.container) {
+      this.registerContainerForDrawing(drawing.id, context.container, false);
+    }
 
     this.saveDrawing(drawing);
 
     this.currentPath = null;
     this.currentPathData = '';
+    this.currentDrawingContext = null;
   };
 
   /**
@@ -572,6 +1004,8 @@ export class DrawingManager {
         this.drawings.delete(drawingId);
       }
 
+      this.unregisterContainerForDrawing(drawingId, false);
+
       // P2P共有が有効な場合はP2P経由で削除（ブロードキャスト）
       if (this.p2pSyncManager && this.settings.sharingEnabled) {
         console.log('📡 Broadcasting drawing DELETE via P2P...');
@@ -593,11 +1027,26 @@ export class DrawingManager {
     try {
       this.drawings.forEach(component => component.destroy());
       this.drawings.clear();
+      this.drawingContainers.clear();
+
+      if (this.windowScrollListener) {
+        window.removeEventListener('scroll', this.windowScrollListener);
+        this.windowScrollListener = null;
+      }
+      this.isWindowScrollUpdateScheduled = false;
 
       if (this.svgCanvas) {
         this.svgCanvas.remove();
         this.svgCanvas = null;
       }
+
+      this.containerScrollListeners.forEach((listener, container) => {
+        container.removeEventListener('scroll', listener);
+      });
+      this.containerScrollListeners.clear();
+      this.containerResizeObservers.forEach(observer => observer.disconnect());
+      this.containerResizeObservers.clear();
+      this.sharedDrawingContainers.clear();
 
       await StorageManager.deleteAllDrawingsForUrl(this.currentUrl, this.settings);
       console.log('All drawings deleted');
@@ -635,7 +1084,9 @@ export class DrawingManager {
           hasViewportSize: !!drawing.viewportSize,
           viewportSize: drawing.viewportSize
         });
-        const newElement = component.recreate(this.svgCanvas!);
+        const container = this.ensureContainerForDrawing(drawingId, component, false);
+        const context = this.buildRenderContext(container);
+        const newElement = component.recreate(this.svgCanvas!, context);
         if (newElement && drawing.id) {
           // クリックハンドラーを再設定
           this.setupDrawingClickHandler(newElement, drawing.id);
@@ -649,7 +1100,9 @@ export class DrawingManager {
           hasViewportSize: !!drawing.viewportSize,
           viewportSize: drawing.viewportSize
         });
-        const newElement = component.recreate(this.svgCanvas!);
+        const container = this.ensureContainerForDrawing(drawingId, component, true);
+        const context = this.buildRenderContext(container);
+        const newElement = component.recreate(this.svgCanvas!, context);
         if (newElement) {
           // 共有描画として視覚的に区別
           newElement.style.opacity = '0.7';
@@ -665,6 +1118,49 @@ export class DrawingManager {
 
     window.addEventListener('resize', handleResize);
     console.log('✅ Drawing resize listener setup complete');
+  }
+
+  /**
+   * リロード後のスクロール位置復元を監視
+   */
+  private setupScrollRestoreListener(): void {
+    // ページ読み込み完了後にスクロール位置を再確認
+    window.addEventListener('load', () => {
+      // さらに少し遅延させて、ブラウザのスクロール復元を確実に待つ
+      setTimeout(() => {
+        if (!this.svgCanvas) return;
+
+        console.log('🔄 Page loaded, recalculating drawing positions after scroll restore...');
+
+        // 自分の描画を再作成
+        this.drawings.forEach((component, drawingId) => {
+          const drawing = component.getDrawing();
+          const container = this.ensureContainerForDrawing(drawingId, component, false);
+          const context = this.buildRenderContext(container);
+          const newElement = component.recreate(this.svgCanvas!, context);
+          if (newElement && drawing.id) {
+            this.setupDrawingClickHandler(newElement, drawing.id);
+          }
+        });
+
+        // 共有描画を再作成
+        this.sharedDrawings.forEach((component, drawingId) => {
+          const drawing = component.getDrawing();
+          const container = this.ensureContainerForDrawing(drawingId, component, true);
+          const context = this.buildRenderContext(container);
+          const newElement = component.recreate(this.svgCanvas!, context);
+          if (newElement) {
+            newElement.style.opacity = '0.7';
+            newElement.setAttribute('data-shared', 'true');
+            if ('ownerId' in drawing) {
+              newElement.setAttribute('data-owner', (drawing as any).ownerId);
+            }
+          }
+        });
+
+        console.log('✅ Drawing positions recalculated after scroll restore');
+      }, 100);
+    }, { once: true });
   }
 
   /**

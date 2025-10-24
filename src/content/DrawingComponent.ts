@@ -4,9 +4,20 @@
 
 import { Drawing } from '../shared/types';
 
+export interface DrawingRenderContext {
+  hasContainer: boolean;
+  pageLeft: number;
+  pageTop: number;
+  scrollLeft: number;
+  scrollTop: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
 export class DrawingComponent {
   private drawing: Drawing;
   private element: SVGElement | null = null;
+  private renderedWithContainer = false;
 
   constructor(drawing: Drawing) {
     this.drawing = drawing;
@@ -15,16 +26,17 @@ export class DrawingComponent {
   /**
    * SVG要素を作成
    */
-  createSVGElement(_svg: SVGSVGElement): SVGElement | null {
-    const { type, pathData, color, strokeWidth } = this.drawing;
+  createSVGElement(_svg: SVGSVGElement, context: DrawingRenderContext): SVGElement | null {
+    const { type, color, strokeWidth } = this.drawing;
+    const activePathData = this.getPathDataForContext(context);
 
     // ビューポートスケーリング計算
     let scaleX = 1;
     let scaleY = 1;
 
-    if (this.drawing.viewportSize) {
-      const currentWidth = window.innerWidth;
-      const currentHeight = window.innerHeight;
+    if (!context.hasContainer && this.drawing.viewportSize) {
+      const currentWidth = context.viewportWidth;
+      const currentHeight = context.viewportHeight;
       const originalWidth = this.drawing.viewportSize.width;
       const originalHeight = this.drawing.viewportSize.height;
 
@@ -40,8 +52,7 @@ export class DrawingComponent {
 
     try {
       if (type === 'pen') {
-        // フリーハンド描画
-        const scaledPathData = this.scalePathData(pathData, scaleX, scaleY);
+        const scaledPathData = this.scalePathData(activePathData, scaleX, scaleY);
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', scaledPathData);
         path.setAttribute('stroke', color);
@@ -50,11 +61,12 @@ export class DrawingComponent {
         path.setAttribute('stroke-linecap', 'round');
         path.setAttribute('stroke-linejoin', 'round');
         path.dataset.drawingId = this.drawing.id;
+        this.applyTransform(path, context);
         this.element = path;
+        this.renderedWithContainer = context.hasContainer;
         return path;
       } else if (type === 'circle') {
-        // 丸
-        const params = JSON.parse(pathData);
+        const params = JSON.parse(activePathData);
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', (parseFloat(params.cx) * scaleX).toString());
         circle.setAttribute('cy', (parseFloat(params.cy) * scaleY).toString());
@@ -63,11 +75,12 @@ export class DrawingComponent {
         circle.setAttribute('stroke-width', strokeWidth.toString());
         circle.setAttribute('fill', 'none');
         circle.dataset.drawingId = this.drawing.id;
+        this.applyTransform(circle, context);
         this.element = circle;
+        this.renderedWithContainer = context.hasContainer;
         return circle;
       } else if (type === 'rect') {
-        // 四角
-        const params = JSON.parse(pathData);
+        const params = JSON.parse(activePathData);
         const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         rect.setAttribute('x', (parseFloat(params.x) * scaleX).toString());
         rect.setAttribute('y', (parseFloat(params.y) * scaleY).toString());
@@ -77,7 +90,9 @@ export class DrawingComponent {
         rect.setAttribute('stroke-width', strokeWidth.toString());
         rect.setAttribute('fill', 'none');
         rect.dataset.drawingId = this.drawing.id;
+        this.applyTransform(rect, context);
         this.element = rect;
+        this.renderedWithContainer = context.hasContainer;
         return rect;
       }
     } catch (error) {
@@ -85,6 +100,13 @@ export class DrawingComponent {
     }
 
     return null;
+  }
+
+  private getPathDataForContext(context: DrawingRenderContext): string {
+    if (!context.hasContainer && this.drawing.pagePathData) {
+      return this.drawing.pagePathData;
+    }
+    return this.drawing.pathData;
   }
 
   /**
@@ -97,8 +119,6 @@ export class DrawingComponent {
 
     console.log('🔧 scalePathData input:', { pathData, scaleX, scaleY });
 
-    // "M 100 200 L 150 250" のような座標をスケーリング
-    // 負の数や小数点にも対応
     const result = pathData.replace(/([ML])\s*([-\d.]+)\s+([-\d.]+)/g, (_match, command, x, y) => {
       const scaledX = parseFloat(x) * scaleX;
       const scaledY = parseFloat(y) * scaleY;
@@ -109,44 +129,55 @@ export class DrawingComponent {
     return result;
   }
 
+  private applyTransform(element: SVGElement, context: DrawingRenderContext): void {
+    if (context.hasContainer) {
+      const translateX = context.pageLeft - context.scrollLeft;
+      const translateY = context.pageTop - context.scrollTop;
+      element.setAttribute('transform', `translate(${translateX}, ${translateY})`);
+    } else {
+      element.removeAttribute('transform');
+    }
+  }
+
+  updateTransform(context: DrawingRenderContext): void {
+    if (!this.element) {
+      return;
+    }
+    this.applyTransform(this.element, context);
+  }
+
   /**
    * 描画を再作成（ウィンドウリサイズ時など）
    */
-  recreate(svg: SVGSVGElement): SVGElement | null {
-    // 既存の要素を削除
+  recreate(svg: SVGSVGElement, context: DrawingRenderContext): SVGElement | null {
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
 
-    // 新しい要素を作成
-    const newElement = this.createSVGElement(svg);
+    const newElement = this.createSVGElement(svg, context);
     if (newElement && svg) {
       svg.appendChild(newElement);
     }
     return newElement;
   }
 
-  /**
-   * 描画データを取得
-   */
   getDrawing(): Drawing {
     return this.drawing;
   }
 
-  /**
-   * SVG要素を取得
-   */
+  isRenderedWithinContainer(): boolean {
+    return this.renderedWithContainer;
+  }
+
   getElement(): SVGElement | null {
     return this.element;
   }
 
-  /**
-   * 削除
-   */
   destroy(): void {
     if (this.element && this.element.parentNode) {
       this.element.parentNode.removeChild(this.element);
     }
     this.element = null;
+    this.renderedWithContainer = false;
   }
 }

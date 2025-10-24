@@ -81,6 +81,9 @@ export class MemoManager {
       // ウィンドウリサイズの監視
       this.setupResizeListener();
 
+      // リロード後のスクロール位置復元を監視
+      this.setupScrollRestoreListener();
+
       // P2P共有が有効な場合、初期化
       if (this.settings.sharingEnabled) {
         await this.initializeP2PSync();
@@ -752,6 +755,33 @@ export class MemoManager {
     }, 300); // 300msのデバウンス
 
     window.addEventListener('resize', handleResize);
+  }
+
+  /**
+   * リロード後のスクロール位置復元を監視
+   */
+  private setupScrollRestoreListener(): void {
+    // ページ読み込み完了後にスクロール位置を再確認
+    window.addEventListener('load', () => {
+      // さらに少し遅延させて、ブラウザのスクロール復元を確実に待つ
+      setTimeout(() => {
+        console.log('🔄 Page loaded, recalculating memo positions after scroll restore...');
+
+        // 全メモの位置を再計算
+        this.memos.forEach(component => {
+          const memo = component.getMemo();
+          component.updateMemo(memo);
+        });
+
+        // 共有メモの位置も再計算
+        this.sharedMemos.forEach(component => {
+          const memo = component.getMemo();
+          component.updateMemo(memo);
+        });
+
+        console.log('✅ Memo positions recalculated after scroll restore');
+      }, 100);
+    }, { once: true });
   }
 
   /**

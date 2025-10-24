@@ -184,6 +184,16 @@ export interface Drawing {
   color: string;
   strokeWidth: number;
   scrollOffset: { x: number; y: number }; // ページのスクロール位置
+  /**
+   * 描画を紐付けたスクロールコンテナのCSSセレクター。
+   * 指定がない場合はページ全体の座標として扱う。
+   */
+  containerSelector?: string;
+  /**
+   * ページ全体での座標データのバックアップ。
+   * コンテナが見つからない場合のフォールバックとして使用する。
+   */
+  pagePathData?: string;
   viewportSize?: { width: number; height: number }; // 作成時のビューポートサイズ（スケーリング用）
   createdAt: number;
   updatedAt: number;
