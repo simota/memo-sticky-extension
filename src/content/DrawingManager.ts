@@ -132,7 +132,7 @@ export class DrawingManager {
 
     if (this.svgCanvas) {
       const component = new DrawingComponent(drawing);
-      const container = this.resolveContainerForDrawing(drawing, true);
+      const container = this.resolveContainerForDrawing(drawing);
       const context = this.buildRenderContext(container);
       const element = component.createSVGElement(this.svgCanvas, context);
       if (element) {
@@ -165,7 +165,7 @@ export class DrawingManager {
     }
   }
 
-  private resolveContainerForDrawing(drawing: Drawing, isShared: boolean = false): HTMLElement | null {
+  private resolveContainerForDrawing(drawing: Drawing): HTMLElement | null {
     const container = this.findContainerElement(drawing.containerSelector);
     if (container) {
       return container;
@@ -177,13 +177,6 @@ export class DrawingManager {
         drawing.id,
         drawing.containerSelector
       );
-    }
-
-    if (drawing.pagePathData) {
-      drawing.pathData = drawing.pagePathData;
-    }
-    if (!isShared) {
-      delete drawing.containerSelector;
     }
     return null;
   }
@@ -221,20 +214,14 @@ export class DrawingManager {
     const resolved = this.findContainerElement(drawing.containerSelector);
     if (resolved) {
       this.registerContainerForDrawing(drawingId, resolved, isShared);
+      if (!component.isRenderedWithinContainer()) {
+        this.recreateDrawingElement(component, resolved, drawingId, isShared);
+      }
       return resolved;
     }
 
-    if (!isShared && drawing.containerSelector && drawing.pagePathData) {
-      drawing.pathData = drawing.pagePathData;
-      delete drawing.containerSelector;
-
-      if (this.svgCanvas) {
-        const context = this.buildRenderContext(null);
-        const newElement = component.recreate(this.svgCanvas, context);
-        if (newElement && drawing.id) {
-          this.setupDrawingClickHandler(newElement, drawing.id);
-        }
-      }
+    if (component.isRenderedWithinContainer()) {
+      this.recreateDrawingElement(component, null, drawingId, isShared);
     }
 
     return null;
@@ -304,6 +291,34 @@ export class DrawingManager {
         container.removeEventListener('scroll', listener);
         this.containerScrollListeners.delete(container);
       }
+    }
+  }
+
+  private recreateDrawingElement(
+    component: DrawingComponent,
+    container: HTMLElement | null,
+    drawingId: string,
+    isShared: boolean
+  ): void {
+    if (!this.svgCanvas) {
+      return;
+    }
+
+    const context = this.buildRenderContext(container);
+    const newElement = component.recreate(this.svgCanvas, context);
+    if (!newElement) {
+      return;
+    }
+
+    if (isShared) {
+      newElement.style.opacity = '0.7';
+      newElement.setAttribute('data-shared', 'true');
+      const drawing = component.getDrawing() as SharedDrawing;
+      if ('ownerId' in drawing) {
+        newElement.setAttribute('data-owner', drawing.ownerId);
+      }
+    } else {
+      this.setupDrawingClickHandler(newElement, drawingId);
     }
   }
 
