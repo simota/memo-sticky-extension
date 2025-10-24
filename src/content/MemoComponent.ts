@@ -31,8 +31,12 @@ export class MemoComponent {
     this.container = container ?? null;
     this.element = this.createElement();
     this.attachEventListeners();
-    this.updateElementPosition();
     this.setupContainerListeners();
+
+    // リロード時のスクロール位置復元を待つため、位置計算を遅延実行
+    requestAnimationFrame(() => {
+      this.updateElementPosition();
+    });
   }
 
   /**

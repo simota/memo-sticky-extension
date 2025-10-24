@@ -64,6 +64,7 @@ export class DrawingManager {
       this.setupMessageListener();
       this.setupP2PListeners();
       this.setupResizeListener();
+      this.setupScrollRestoreListener();
 
       console.log('DrawingManager initialized');
     } catch (error) {
@@ -280,7 +281,10 @@ export class DrawingManager {
       this.containerResizeObservers.set(container, observer);
     }
 
-    this.updateDrawingsForContainer(container);
+    // リロード時のスクロール位置復元を待つため、描画更新を遅延実行
+    requestAnimationFrame(() => {
+      this.updateDrawingsForContainer(container);
+    });
   }
 
   private unregisterContainerForDrawing(drawingId: string, isShared: boolean): void {
@@ -1111,6 +1115,49 @@ export class DrawingManager {
 
     window.addEventListener('resize', handleResize);
     console.log('✅ Drawing resize listener setup complete');
+  }
+
+  /**
+   * リロード後のスクロール位置復元を監視
+   */
+  private setupScrollRestoreListener(): void {
+    // ページ読み込み完了後にスクロール位置を再確認
+    window.addEventListener('load', () => {
+      // さらに少し遅延させて、ブラウザのスクロール復元を確実に待つ
+      setTimeout(() => {
+        if (!this.svgCanvas) return;
+
+        console.log('🔄 Page loaded, recalculating drawing positions after scroll restore...');
+
+        // 自分の描画を再作成
+        this.drawings.forEach((component, drawingId) => {
+          const drawing = component.getDrawing();
+          const container = this.ensureContainerForDrawing(drawingId, component, false);
+          const context = this.buildRenderContext(container);
+          const newElement = component.recreate(this.svgCanvas!, context);
+          if (newElement && drawing.id) {
+            this.setupDrawingClickHandler(newElement, drawing.id);
+          }
+        });
+
+        // 共有描画を再作成
+        this.sharedDrawings.forEach((component, drawingId) => {
+          const drawing = component.getDrawing();
+          const container = this.ensureContainerForDrawing(drawingId, component, true);
+          const context = this.buildRenderContext(container);
+          const newElement = component.recreate(this.svgCanvas!, context);
+          if (newElement) {
+            newElement.style.opacity = '0.7';
+            newElement.setAttribute('data-shared', 'true');
+            if ('ownerId' in drawing) {
+              newElement.setAttribute('data-owner', (drawing as any).ownerId);
+            }
+          }
+        });
+
+        console.log('✅ Drawing positions recalculated after scroll restore');
+      }, 100);
+    }, { once: true });
   }
 
   /**
